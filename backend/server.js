@@ -262,7 +262,10 @@ app.get("/api/requests", requireAuth, async (req, res) => {
       SELECT id, user_id AS "userId", type,
              start_date::text AS "start",
              end_date::text AS "end",
-             days, reason, status
+             days, reason, status,
+             start_time AS "startTime", end_time AS "endTime",
+             return_date::text AS "returnDate", location,
+             contact_phone AS "contactPhone"
       FROM leave_requests
     `;
     const params = [];
@@ -286,10 +289,10 @@ app.get("/api/requests", requireAuth, async (req, res) => {
   }
 });
 
-// POST /api/requests  body: { type, start, end, reason } - userId taken from token
+// POST /api/requests  body: { type, start, end, reason, startTime, endTime, returnDate, location, contactPhone }
 app.post("/api/requests", requireAuth, async (req, res) => {
   try {
-    const { type, start, end, reason } = req.body;
+    const { type, start, end, reason, startTime, endTime, returnDate, location, contactPhone } = req.body;
 
     if (!type || !start || !end) {
       return res.status(400).json({ error: "Eksik alanlar var." });
@@ -304,13 +307,21 @@ app.post("/api/requests", requireAuth, async (req, res) => {
     const days = diffDays(start, end);
 
     const { rows } = await pool.query(
-      `INSERT INTO leave_requests (user_id, type, start_date, end_date, days, reason, status)
-       VALUES ($1, $2, $3, $4, $5, $6, 'beklemede')
+      `INSERT INTO leave_requests
+         (user_id, type, start_date, end_date, days, reason, start_time, end_time, return_date, location, contact_phone, status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'beklemede')
        RETURNING id, user_id AS "userId", type,
                  start_date::text AS "start",
                  end_date::text AS "end",
-                 days, reason, status`,
-      [req.user.id, type, start, end, days, reason || null]
+                 days, reason, status,
+                 start_time AS "startTime", end_time AS "endTime",
+                 return_date::text AS "returnDate", location,
+                 contact_phone AS "contactPhone"`,
+      [
+        req.user.id, type, start, end, days, reason || null,
+        startTime || null, endTime || null, returnDate || null,
+        location || null, contactPhone || null,
+      ]
     );
 
     res.status(201).json(rows[0]);

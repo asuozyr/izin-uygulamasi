@@ -96,6 +96,21 @@ function Avatar({ user, size = 36 }) {
   );
 }
 
+// İzin talebindeki ek bilgileri (saat, işe dönüş, yer, telefon) kart içinde gösterir
+function RequestExtra({ r }) {
+  const bits = [];
+  if (r.startTime || r.endTime) bits.push(`Saat: ${r.startTime || "?"}–${r.endTime || "?"}`);
+  if (r.returnDate) bits.push(`İşe dönüş: ${formatDate(r.returnDate)}`);
+  if (r.location) bits.push(`Yer: ${r.location}`);
+  if (r.contactPhone) bits.push(`Tel: ${r.contactPhone}`);
+  if (bits.length === 0) return null;
+  return (
+    <div style={{ width: "100%", marginTop: 2, fontSize: 12.5, color: "var(--color-text-secondary)", display: "flex", flexWrap: "wrap", gap: 12 }}>
+      {bits.map((b, i) => <span key={i}>{b}</span>)}
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------------
 // API helper
 // ---------------------------------------------------------------------
@@ -412,7 +427,10 @@ function MainApp({ token, user, onLogout }) {
   const [error, setError] = useState("");
   const [actionError, setActionError] = useState("");
 
-  const [form, setForm] = useState({ type: "yillik", start: "", end: "", reason: "" });
+  const [form, setForm] = useState({
+    type: "yillik", start: "", end: "", startTime: "", endTime: "",
+    returnDate: "", location: "", contactPhone: "", reason: "",
+  });
   const [formError, setFormError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -481,9 +499,17 @@ function MainApp({ token, user, onLogout }) {
         type: form.type,
         start: form.start,
         end: form.end,
+        startTime: form.startTime,
+        endTime: form.endTime,
+        returnDate: form.returnDate,
+        location: form.location,
+        contactPhone: form.contactPhone,
         reason: form.reason,
       });
-      setForm({ type: "yillik", start: "", end: "", reason: "" });
+      setForm({
+        type: "yillik", start: "", end: "", startTime: "", endTime: "",
+        returnDate: "", location: "", contactPhone: "", reason: "",
+      });
       setView("taleplerim");
       refreshRequests();
     } catch (err) {
@@ -677,7 +703,10 @@ function MainApp({ token, user, onLogout }) {
                   ))}
                 </select>
               </div>
-              <div></div>
+              <div>
+                <label style={{ fontSize: 13, color: "var(--color-text-secondary)", display: "block", marginBottom: 4 }}>Çalışmaya başlanacak tarih</label>
+                <input type="date" value={form.returnDate} onChange={(e) => setForm({ ...form, returnDate: e.target.value })} style={{ width: "100%" }} />
+              </div>
               <div>
                 <label style={{ fontSize: 13, color: "var(--color-text-secondary)", display: "block", marginBottom: 4 }}>Başlangıç tarihi</label>
                 <input type="date" value={form.start} onChange={(e) => setForm({ ...form, start: e.target.value })} style={{ width: "100%" }} />
@@ -686,6 +715,26 @@ function MainApp({ token, user, onLogout }) {
                 <label style={{ fontSize: 13, color: "var(--color-text-secondary)", display: "block", marginBottom: 4 }}>Bitiş tarihi</label>
                 <input type="date" value={form.end} onChange={(e) => setForm({ ...form, end: e.target.value })} style={{ width: "100%" }} />
               </div>
+              <div>
+                <label style={{ fontSize: 13, color: "var(--color-text-secondary)", display: "block", marginBottom: 4 }}>Başlangıç saati</label>
+                <input type="time" value={form.startTime} onChange={(e) => setForm({ ...form, startTime: e.target.value })} style={{ width: "100%" }} />
+              </div>
+              <div>
+                <label style={{ fontSize: 13, color: "var(--color-text-secondary)", display: "block", marginBottom: 4 }}>Bitiş saati</label>
+                <input type="time" value={form.endTime} onChange={(e) => setForm({ ...form, endTime: e.target.value })} style={{ width: "100%" }} />
+              </div>
+              <div>
+                <label style={{ fontSize: 13, color: "var(--color-text-secondary)", display: "block", marginBottom: 4 }}>İzin geçirilecek yer</label>
+                <input type="text" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })}
+                  placeholder="Örn. İzmir, memleket"
+                  style={{ width: "100%", fontFamily: "inherit", fontSize: 14, padding: "6px 10px", borderRadius: "var(--border-radius-md)", border: "1px solid #cfcfd6", boxSizing: "border-box" }} />
+              </div>
+              <div>
+                <label style={{ fontSize: 13, color: "var(--color-text-secondary)", display: "block", marginBottom: 4 }}>Ulaşılabilecek telefon</label>
+                <input type="tel" value={form.contactPhone} onChange={(e) => setForm({ ...form, contactPhone: e.target.value })}
+                  placeholder="05xx xxx xx xx"
+                  style={{ width: "100%", fontFamily: "inherit", fontSize: 14, padding: "6px 10px", borderRadius: "var(--border-radius-md)", border: "1px solid #cfcfd6", boxSizing: "border-box" }} />
+              </div>
             </div>
             <div style={{ marginBottom: "12px" }}>
               <label style={{ fontSize: 13, color: "var(--color-text-secondary)", display: "block", marginBottom: 4 }}>Açıklama (opsiyonel)</label>
@@ -693,7 +742,7 @@ function MainApp({ token, user, onLogout }) {
                 value={form.reason}
                 onChange={(e) => setForm({ ...form, reason: e.target.value })}
                 rows={3}
-                style={{ width: "100%", resize: "vertical", fontFamily: "inherit", fontSize: 14, padding: "8px 10px", borderRadius: "var(--border-radius-md)", border: "0.5px solid var(--color-border-tertiary)" }}
+                style={{ width: "100%", boxSizing: "border-box", resize: "vertical", fontFamily: "inherit", fontSize: 14, padding: "8px 10px", borderRadius: "var(--border-radius-md)", border: "1px solid #cfcfd6" }}
                 placeholder="Örn. aile ziyareti, sağlık kontrolü..."
               />
             </div>
@@ -746,6 +795,7 @@ function MainApp({ token, user, onLogout }) {
                   <button onClick={() => cancelRequest(r.id)} style={{ fontSize: 13, padding: "4px 10px" }}>İptal et</button>
                 )}
               </div>
+              <RequestExtra r={r} />
             </div>
           ))}
         </div>
@@ -796,6 +846,7 @@ function MainApp({ token, user, onLogout }) {
                     <i className="ti ti-x" style={{ fontSize: 14 }} aria-hidden="true"></i> Reddet
                   </button>
                 </div>
+                <RequestExtra r={r} />
               </div>
             );
           })}
@@ -821,6 +872,7 @@ function MainApp({ token, user, onLogout }) {
                   <span style={{ fontSize: 13, color: "var(--color-text-secondary)" }}>{formatDate(r.start)} – {formatDate(r.end)} ({r.days} gün)</span>
                 </div>
                 <ColorBadge text={STATUS[r.status].label} ramp={STATUS[r.status].color} />
+                <RequestExtra r={r} />
               </div>
             );
           })}
