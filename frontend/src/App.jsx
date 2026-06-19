@@ -391,8 +391,19 @@ function LoginScreen({ onLogin }) {
 // Main app (shown after login)
 // =======================================================================
 function MainApp({ token, user, onLogout }) {
-  const role = user.role; // "calisan" | "yonetici"
-  const [view, setView] = useState(role === "calisan" ? "yenitalep" : "onaylar");
+  const realRole = user.role; // gerçek rol: "calisan" | "yonetici"
+  const isAdmin = realRole === "yonetici";
+  const [previewEmployee, setPreviewEmployee] = useState(false); // admin: çalışan görünümünü önizle
+  const role = isAdmin && previewEmployee ? "calisan" : realRole; // arayüzde kullanılan etkin rol
+  const [view, setView] = useState(realRole === "calisan" ? "yenitalep" : "onaylar");
+
+  function togglePreview() {
+    setPreviewEmployee((p) => {
+      const next = !p;
+      setView(next ? "yenitalep" : "onaylar"); // görünümü role uygun sıfırla
+      return next;
+    });
+  }
 
   const [employees, setEmployees] = useState([]);
   const [requests, setRequests] = useState([]);
@@ -411,9 +422,9 @@ function MainApp({ token, user, onLogout }) {
 
   // ---- Load employees once (yalnızca yönetici; /api/employees admin'e özel) ----
   useEffect(() => {
-    if (role !== "yonetici") return;
+    if (realRole !== "yonetici") return;
     api.getEmployees(token).then(setEmployees).catch((err) => setError(err.message));
-  }, [token, role]);
+  }, [token, realRole]);
 
   // ---- Load requests ----
   const refreshRequests = useCallback(() => {
@@ -551,6 +562,12 @@ function MainApp({ token, user, onLogout }) {
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          {isAdmin && (
+            <button onClick={togglePreview} style={{ fontSize: 13, padding: "6px 12px", display: "flex", alignItems: "center", gap: 6 }}>
+              <i className={`ti ${previewEmployee ? "ti-arrow-back-up" : "ti-eye"}`} style={{ fontSize: 14 }} aria-hidden="true"></i>
+              {previewEmployee ? "Yönetici görünümüne dön" : "Çalışan görünümü"}
+            </button>
+          )}
           <Avatar user={user} size={34} />
           <span style={{ fontSize: 14, fontWeight: 500 }}>{user.name}</span>
           <button onClick={onLogout} style={{ fontSize: 13, padding: "6px 12px", display: "flex", alignItems: "center", gap: 6 }}>
@@ -559,6 +576,17 @@ function MainApp({ token, user, onLogout }) {
           </button>
         </div>
       </div>
+
+      {previewEmployee && (
+        <div style={{
+          background: BRAND.light, color: BRAND.text,
+          borderRadius: "var(--border-radius-md)", padding: "8px 14px",
+          marginBottom: "1rem", fontSize: 13, display: "flex", alignItems: "center", gap: 8
+        }}>
+          <i className="ti ti-eye" aria-hidden="true"></i>
+          Önizleme: çalışan görünümü — verileriniz değişmez. Sağ üstten yönetici görünümüne dönebilirsiniz.
+        </div>
+      )}
 
       {error && (
         <div style={{
