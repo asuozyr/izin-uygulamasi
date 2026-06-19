@@ -55,6 +55,8 @@ const pool = new Pool(
         connectionString:
           process.env.DATABASE_URL ||
           "postgresql://postgres:postgres@localhost:5432/izin",
+        // Yönetilen Postgres (Render vb.) SSL ister; lokal Docker istemez.
+        ssl: process.env.DB_SSL === "true" ? { rejectUnauthorized: false } : false,
       }
 );
 
@@ -410,7 +412,12 @@ app.get("/api/calendar", requireAuth, async (req, res) => {
 // ---------------------------------------------------------------------
 // Serve frontend build
 // ---------------------------------------------------------------------
-const FRONTEND_DIST = path.join(__dirname, "frontend", "dist");
+const DIST_CANDIDATES = [
+  path.join(__dirname, "frontend", "dist"),       // backend/frontend/dist (Docker kopyası)
+  path.join(__dirname, "..", "frontend", "dist"), // ../frontend/dist (Render/monorepo)
+];
+const FRONTEND_DIST =
+  DIST_CANDIDATES.find((p) => fs.existsSync(path.join(p, "index.html"))) || DIST_CANDIDATES[0];
 const INDEX_HTML = path.join(FRONTEND_DIST, "index.html");
 if (fs.existsSync(FRONTEND_DIST)) {
   app.use(express.static(FRONTEND_DIST));
