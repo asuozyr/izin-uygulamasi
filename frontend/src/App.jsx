@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import logo from "./assets/logo.png";
+import logoDark from "./assets/logo-dark.png";
 
 const API_BASE = "";
 
@@ -118,7 +119,7 @@ function MiniRequest({ r, name }) {
   const t = LEAVE_TYPES[r.type] || { label: r.type, color: "gray" };
   const s = STATUS[r.status] || { label: r.status, color: "gray" };
   return (
-    <div style={{ background: "#fff", border: "1px solid #ebe9f2", borderRadius: 14, padding: "12px 14px" }}>
+    <div style={{ background: "var(--color-background-primary)", border: "1px solid var(--color-border-tertiary)", borderRadius: 14, padding: "12px 14px" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
           {name && <span style={{ fontWeight: 500, fontSize: 14 }}>{name}</span>}
@@ -429,36 +430,41 @@ function LoginScreen({ onLogin }) {
 // =======================================================================
 const MAINAPP_CSS = `
 .ev-shell * { box-sizing: border-box; }
-.ev-shell { display: flex; width: 100%; flex: 1; min-height: 100vh; text-align: left; font-family: var(--sans, system-ui, sans-serif); color: #1f2233; }
-.ev-sidebar { width: 280px; flex-shrink: 0; border-right: 1px solid #ebe9f2; display: flex; flex-direction: column; padding: 22px 16px; position: sticky; top: 0; align-self: flex-start; height: 100vh; }
+.ev-shell { display: flex; width: 100%; flex: 1; min-height: 100vh; text-align: left; font-family: var(--sans, system-ui, sans-serif); color: var(--color-text-primary); background: var(--app-bg); }
+.ev-sidebar { width: 280px; flex-shrink: 0; border-right: 1px solid var(--color-border-tertiary); display: flex; flex-direction: column; padding: 22px 16px; position: sticky; top: 0; align-self: flex-start; height: 100vh; }
 .ev-logo { padding: 4px 10px 22px; }
 .ev-logo img { height: 30px; width: auto; display: block; }
+.ev-logo .logo-dark { display: none; }
 .ev-nav { display: flex; flex-direction: column; gap: 4px; }
-.ev-navitem { display: flex; align-items: center; gap: 11px; padding: 10px 12px; border-radius: 10px; font-size: 14px; color: #5b5566; background: none; border: 0; cursor: pointer; font-family: inherit; text-align: left; width: 100%; transition: background .12s, color .12s; }
+.ev-navitem { display: flex; align-items: center; gap: 11px; padding: 10px 12px; border-radius: 10px; font-size: 14px; color: var(--color-text-secondary); background: none; border: 0; cursor: pointer; font-family: inherit; text-align: left; width: 100%; transition: background .12s, color .12s; }
 .ev-navitem i { font-size: 18px; }
-.ev-navitem:hover { background: #f5f3fa; color: #1f2233; }
-.ev-navitem.active { background: ${BRAND.light}; color: ${BRAND.text}; font-weight: 500; }
-.ev-userbox { margin-top: auto; display: flex; align-items: center; gap: 10px; padding: 10px 8px; border-top: 1px solid #ebe9f2; }
-.ev-icbtn { background: none; border: 0; cursor: pointer; color: #9a93a6; display: grid; place-items: center; padding: 6px; border-radius: 8px; }
-.ev-icbtn:hover { background: #f5f3fa; color: ${BRAND.primary}; }
+.ev-navitem:hover { background: var(--surface-hover); color: var(--color-text-primary); }
+.ev-navitem.active { background: var(--accent-bg); color: var(--accent); font-weight: 500; }
+.ev-userbox { margin-top: auto; display: flex; align-items: center; gap: 10px; padding: 10px 8px; border-top: 1px solid var(--color-border-tertiary); }
+.ev-icbtn { background: none; border: 0; cursor: pointer; color: var(--color-text-tertiary); display: grid; place-items: center; padding: 6px; border-radius: 8px; }
+.ev-icbtn:hover { background: var(--surface-hover); color: var(--accent); }
 .ev-main { flex: 1; min-width: 0; padding: 28px 40px; }
 .ev-topbar { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 22px; flex-wrap: wrap; }
-.ev-h1 { font-size: 21px; font-weight: 600; margin: 0; color: #1f2233; }
-.ev-sub { font-size: 13px; color: var(--color-text-secondary, #6b6375); margin: 3px 0 0; }
+.ev-h1 { font-size: 21px; font-weight: 600; margin: 0; color: var(--color-text-primary); }
+.ev-sub { font-size: 13px; color: var(--color-text-secondary); margin: 3px 0 0; }
 .ev-btn-primary { display: inline-flex; align-items: center; gap: 6px; background: ${BRAND.primary}; color: #fff; border: 0; border-radius: 10px; padding: 9px 15px; font-size: 14px; font-weight: 500; cursor: pointer; font-family: inherit; }
 .ev-btn-primary:hover { background: ${BRAND.primaryHover}; }
-.ev-btn-ghost { display: inline-flex; align-items: center; gap: 6px; background: #fff; color: #5b5566; border: 1px solid #e3e1ec; border-radius: 10px; padding: 8px 13px; font-size: 13px; cursor: pointer; font-family: inherit; }
-.ev-btn-ghost:hover { border-color: #cfcad9; }
+.ev-btn-ghost { display: inline-flex; align-items: center; gap: 6px; background: var(--color-background-primary); color: var(--color-text-secondary); border: 1px solid var(--color-border-secondary); border-radius: 10px; padding: 8px 13px; font-size: 13px; cursor: pointer; font-family: inherit; transition: background .12s, border-color .12s; }
+.ev-btn-ghost:hover { background: var(--surface-hover); border-color: var(--color-text-tertiary); }
 .ev-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 20px; }
-.ev-stat { background: #f7f5fb; border-radius: 12px; padding: 16px 18px; }
-.ev-stat .lab { font-size: 13px; color: var(--color-text-secondary, #6b6375); }
-.ev-stat .val { font-size: 26px; font-weight: 600; margin-top: 4px; }
-.ev-card { background: #fff; border: 1px solid #ebe9f2; border-radius: 14px; padding: 16px 18px; }
-.ev-progress { height: 8px; border-radius: 999px; background: #efedf4; overflow: hidden; }
+.ev-stat { background: var(--color-background-secondary); border: 1px solid var(--color-border-tertiary); border-radius: 12px; padding: 16px 18px; }
+.ev-stat .lab { font-size: 13px; color: var(--color-text-secondary); }
+.ev-stat .val { font-size: 26px; font-weight: 600; margin-top: 4px; color: var(--color-text-primary); }
+.ev-card { background: var(--color-background-primary); border: 1px solid var(--color-border-tertiary); border-radius: 14px; padding: 16px 18px; }
+.ev-progress { height: 8px; border-radius: 999px; background: var(--color-background-tertiary); overflow: hidden; }
 .ev-progress > div { height: 100%; background: ${BRAND.primary}; }
+@media (prefers-color-scheme: dark) {
+  .ev-logo .logo-light { display: none; }
+  .ev-logo .logo-dark { display: block; }
+}
 @media (max-width: 820px) {
   .ev-shell { flex-direction: column; min-height: 0; }
-  .ev-sidebar { width: auto; height: auto; position: static; border-right: 0; border-bottom: 1px solid #ebe9f2; flex-direction: row; align-items: center; flex-wrap: wrap; gap: 6px; padding: 12px; }
+  .ev-sidebar { width: auto; height: auto; position: static; border-right: 0; border-bottom: 1px solid var(--color-border-tertiary); flex-direction: row; align-items: center; flex-wrap: wrap; gap: 6px; padding: 12px; }
   .ev-logo { padding: 0 8px 0 4px; }
   .ev-nav { flex-direction: row; flex-wrap: wrap; gap: 4px; flex: 1; }
   .ev-navitem { width: auto; padding: 8px 10px; }
@@ -704,7 +710,10 @@ function MainApp({ token, user, onLogout }) {
       <style>{MAINAPP_CSS}</style>
 
       <aside className="ev-sidebar">
-        <div className="ev-logo"><img src={logo} alt="SmartAlpha" /></div>
+        <div className="ev-logo">
+          <img className="logo-light" src={logo} alt="SmartAlpha" />
+          <img className="logo-dark" src={logoDark} alt="SmartAlpha" />
+        </div>
         <nav className="ev-nav">
           {navItems.map((item) => (
             <button
@@ -721,7 +730,7 @@ function MainApp({ token, user, onLogout }) {
           <Avatar user={user} size={34} />
           <div style={{ minWidth: 0, flex: 1 }}>
             <div style={{ fontSize: 13, fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{user.name}</div>
-            <div style={{ fontSize: 12, color: "#9a93a6" }}>{realRole === "yonetici" ? "Yönetici" : "Çalışan"}</div>
+            <div style={{ fontSize: 12, color: "var(--color-text-tertiary)" }}>{realRole === "yonetici" ? "Yönetici" : "Çalışan"}</div>
           </div>
           <button className="ev-icbtn" onClick={onLogout} aria-label="Çıkış yap" title="Çıkış yap">
             <i className="ti ti-logout" style={{ fontSize: 18 }}></i>
@@ -745,7 +754,7 @@ function MainApp({ token, user, onLogout }) {
 
         {previewEmployee && (
           <div style={{
-            background: BRAND.light, color: BRAND.text,
+            background: "var(--accent-bg)", color: "var(--accent)",
             borderRadius: 10, padding: "8px 14px",
             marginBottom: "1rem", fontSize: 13, display: "flex", alignItems: "center", gap: 8
           }}>
@@ -758,7 +767,7 @@ function MainApp({ token, user, onLogout }) {
           <div style={{
             background: "var(--color-background-danger, #fdecea)",
             color: "var(--color-text-danger, #b42318)",
-            border: "1px solid #f3c8c2",
+            border: "1px solid var(--color-border-danger, #f3c8c2)",
             borderRadius: 10, padding: "10px 14px", marginBottom: "1rem", fontSize: 14
           }}>
             {error}
@@ -788,7 +797,7 @@ function MainApp({ token, user, onLogout }) {
               <button className="ev-btn-ghost" onClick={() => setView("yenitalep")}><i className="ti ti-plus" aria-hidden="true"></i>Yeni talep</button>
             </div>
             {myRequests.length === 0 ? (
-              <div className="ev-card" style={{ color: "#9a93a6", fontSize: 14 }}>Henüz izin talebin yok.</div>
+              <div className="ev-card" style={{ color: "var(--color-text-tertiary)", fontSize: 14 }}>Henüz izin talebin yok.</div>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                 {myRequests.slice(0, 4).map((r) => <MiniRequest key={r.id} r={r} />)}
@@ -811,7 +820,7 @@ function MainApp({ token, user, onLogout }) {
               )}
             </div>
             {pendingRequests.length === 0 ? (
-              <div className="ev-card" style={{ color: "#9a93a6", fontSize: 14 }}>Bekleyen talep yok.</div>
+              <div className="ev-card" style={{ color: "var(--color-text-tertiary)", fontSize: 14 }}>Bekleyen talep yok.</div>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                 {pendingRequests.slice(0, 4).map((r) => {
@@ -871,7 +880,7 @@ function MainApp({ token, user, onLogout }) {
                 <label style={{ fontSize: 13, color: "var(--color-text-secondary)", display: "block", marginBottom: 4 }}>İzin geçirilecek yer</label>
                 <input type="text" value={form.location} onChange={(e) => updateField("location", e.target.value)}
                   placeholder="Örn. İzmir, memleket"
-                  style={{ width: "100%", fontFamily: "inherit", fontSize: 14, padding: "6px 10px", borderRadius: "var(--border-radius-md)", border: `1px solid ${fieldErrors.location ? ERR_COLOR : "#cfcfd6"}`, boxSizing: "border-box" }} />
+                  style={{ width: "100%", fontFamily: "inherit", fontSize: 14, padding: "6px 10px", borderRadius: "var(--border-radius-md)", border: `1px solid ${fieldErrors.location ? ERR_COLOR : "var(--color-border-secondary)"}`, boxSizing: "border-box" }} />
                 {fieldErrors.location && <p style={{ color: ERR_COLOR, fontSize: 12, margin: "4px 0 0" }}>{fieldErrors.location}</p>}
               </div>
               <div>
@@ -879,10 +888,10 @@ function MainApp({ token, user, onLogout }) {
                 <div style={{ display: "flex", gap: 6 }}>
                   <input type="text" list="ulke-kodlari" value={form.countryCode} onChange={(e) => updateField("countryCode", e.target.value)}
                     aria-label="Ülke kodu"
-                    style={{ width: 78, flexShrink: 0, fontFamily: "inherit", fontSize: 14, padding: "6px 8px", borderRadius: "var(--border-radius-md)", border: `1px solid ${fieldErrors.contactPhone ? ERR_COLOR : "#cfcfd6"}`, boxSizing: "border-box" }} />
+                    style={{ width: 78, flexShrink: 0, fontFamily: "inherit", fontSize: 14, padding: "6px 8px", borderRadius: "var(--border-radius-md)", border: `1px solid ${fieldErrors.contactPhone ? ERR_COLOR : "var(--color-border-secondary)"}`, boxSizing: "border-box" }} />
                   <input type="tel" value={form.contactPhone} onChange={(e) => updateField("contactPhone", e.target.value)}
                     placeholder="5xx xxx xx xx"
-                    style={{ flex: 1, minWidth: 0, fontFamily: "inherit", fontSize: 14, padding: "6px 10px", borderRadius: "var(--border-radius-md)", border: `1px solid ${fieldErrors.contactPhone ? ERR_COLOR : "#cfcfd6"}`, boxSizing: "border-box" }} />
+                    style={{ flex: 1, minWidth: 0, fontFamily: "inherit", fontSize: 14, padding: "6px 10px", borderRadius: "var(--border-radius-md)", border: `1px solid ${fieldErrors.contactPhone ? ERR_COLOR : "var(--color-border-secondary)"}`, boxSizing: "border-box" }} />
                   <datalist id="ulke-kodlari">
                     <option value="+90">Türkiye</option>
                     <option value="+1">ABD / Kanada</option>
@@ -911,7 +920,7 @@ function MainApp({ token, user, onLogout }) {
                 value={form.reason}
                 onChange={(e) => setForm({ ...form, reason: e.target.value })}
                 rows={3}
-                style={{ width: "100%", boxSizing: "border-box", resize: "vertical", fontFamily: "inherit", fontSize: 14, padding: "8px 10px", borderRadius: "var(--border-radius-md)", border: "1px solid #cfcfd6" }}
+                style={{ width: "100%", boxSizing: "border-box", resize: "vertical", fontFamily: "inherit", fontSize: 14, padding: "8px 10px", borderRadius: "var(--border-radius-md)", border: "1px solid var(--color-border-secondary)" }}
                 placeholder="Örn. aile ziyareti, sağlık kontrolü..."
               />
             </div>
@@ -1044,7 +1053,7 @@ function MainApp({ token, user, onLogout }) {
                   <ColorBadge text={STATUS[r.status].label} ramp={STATUS[r.status].color} />
                   {realRole === "yonetici" && !previewEmployee && (r.status === "beklemede" || r.status === "onaylandi") && (
                     <button onClick={() => cancelByAdmin(r.id)} title="Talebi iptal et"
-                      style={{ fontSize: 13, padding: "4px 12px", display: "flex", alignItems: "center", gap: 4, color: "#a32d2d", borderColor: "#e7a9a9" }}>
+                      style={{ fontSize: 13, padding: "4px 12px", display: "flex", alignItems: "center", gap: 4, color: "var(--color-text-danger)", borderColor: "var(--color-border-danger)" }}>
                       <i className="ti ti-ban" style={{ fontSize: 14 }} aria-hidden="true"></i> İptal et
                     </button>
                   )}

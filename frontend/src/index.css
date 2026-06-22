@@ -8,6 +8,41 @@
   --accent-bg: rgba(111, 3, 181, 0.10);
   --accent-border: rgba(111, 3, 181, 0.45);
   --social-bg: rgba(244, 243, 236, 0.5);
+
+  /* Uygulama tema token'ları — açık mod */
+  --color-background-primary: #ffffff;
+  --color-background-secondary: #f6f4fb;
+  --color-background-tertiary: #ecebf2;
+  --color-text-primary: #1f2233;
+  --color-text-secondary: #5d5870;
+  --color-text-tertiary: #837e92;
+  --color-border-tertiary: #e6e4ee;
+  --color-border-secondary: #d6d3df;
+  --color-text-danger: #b42318;
+  --color-background-danger: #fdecea;
+  --color-border-danger: #f3c8c2;
+  --color-text-success: #1a7f47;
+  --color-background-success: #e7f6ec;
+  --surface-hover: #f3f1f9;
+  --app-bg: #ffffff;
+
+  /* Uygulama tema token'ları — açık mod */
+  --color-text-primary: #1f2233;
+  --color-text-secondary: #5a5466;
+  --color-text-tertiary: #8b8597;
+  --color-text-danger: #b42318;
+  --color-background-primary: #ffffff;
+  --color-background-secondary: #f6f4fa;
+  --color-background-tertiary: #f3f1f7;
+  --color-background-danger: #fdecea;
+  --color-border-tertiary: #e8e6ee;
+  --color-border-secondary: #d6d3df;
+  --color-accent: #6F03B5;
+  --color-accent-soft-bg: #F2E7FB;
+  --color-accent-soft-text: #4A0379;
+  --border-radius-md: 8px;
+  --border-radius-lg: 12px;
+  --border-radius-xl: 16px;
   --shadow:
     rgba(0, 0, 0, 0.1) 0 10px 15px -3px, rgba(0, 0, 0, 0.05) 0 4px 6px -2px;
 
@@ -41,6 +76,24 @@
     --accent-bg: rgba(154, 61, 214, 0.18);
     --accent-border: rgba(154, 61, 214, 0.5);
     --social-bg: rgba(47, 48, 58, 0.5);
+
+    /* Uygulama tema token'ları — koyu mod (Linear/GitHub tarzı) */
+    --bg: #0F1117;
+    --color-background-primary: #161B22;
+    --color-background-secondary: #1b212b;
+    --color-background-tertiary: #232a36;
+    --color-text-primary: #F8FAFC;
+    --color-text-secondary: #CBD5E1;
+    --color-text-tertiary: #94A3B8;
+    --color-border-tertiary: #2A2F3A;
+    --color-border-secondary: #3a414f;
+    --color-text-danger: #f87171;
+    --color-background-danger: #3a1d1d;
+    --color-border-danger: #5b2a2a;
+    --color-text-success: #4ade80;
+    --color-background-success: #16301f;
+    --surface-hover: #20262f;
+    --app-bg: #0F1117;
     --shadow:
       rgba(0, 0, 0, 0.4) 0 10px 15px -3px, rgba(0, 0, 0, 0.25) 0 4px 6px -2px;
   }
