@@ -5,10 +5,10 @@ const API_BASE = "";
 
 // Brand color palette (purple)
 const BRAND = {
-  primary: "#6B21A8",      // main purple
-  primaryHover: "#581C87", // darker on hover
-  light: "#F3E8FF",        // light purple background
-  text: "#3B0764",         // deep purple for text accents
+  primary: "#6F03B5",      // logodaki mor
+  primaryHover: "#58028F", // hover için koyu ton
+  light: "#F2E7FB",        // açık mor arka plan
+  text: "#4A0379",         // metin vurguları için koyu mor
 };
 
 const LEAVE_TYPES = {
@@ -111,6 +111,26 @@ function RequestExtra({ r }) {
   );
 }
 
+// Genel bakış ekranında kullanılan kompakt talep kartı
+function MiniRequest({ r, name }) {
+  const t = LEAVE_TYPES[r.type] || { label: r.type, color: "gray" };
+  const s = STATUS[r.status] || { label: r.status, color: "gray" };
+  return (
+    <div style={{ background: "#fff", border: "1px solid #ebe9f2", borderRadius: 14, padding: "12px 14px" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          {name && <span style={{ fontWeight: 500, fontSize: 14 }}>{name}</span>}
+          <span style={{ fontSize: 12, padding: "3px 10px", borderRadius: 999, background: RAMP_COLORS[t.color].bg, color: RAMP_COLORS[t.color].fg }}>{t.label}</span>
+          <span style={{ fontSize: 14 }}>{formatDate(r.start)} – {formatDate(r.end)}</span>
+          <span style={{ fontSize: 13, color: "var(--color-text-secondary)" }}>({r.days} gün)</span>
+        </div>
+        <span style={{ fontSize: 12, padding: "3px 10px", borderRadius: 999, background: RAMP_COLORS[s.color].bg, color: RAMP_COLORS[s.color].fg }}>{s.label}</span>
+      </div>
+      <RequestExtra r={r} />
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------------
 // API helper
 // ---------------------------------------------------------------------
@@ -190,7 +210,7 @@ const LOGIN_CSS = `
 .la-input .lead { position: absolute; left: 16px; width: 19px; height: 19px; color: #9aa0ad; pointer-events: none; }
 .la-input input { width: 100%; height: 52px; padding: 0 16px 0 46px; border: 1.5px solid var(--color-border-tertiary, #e5e4e7); border-radius: 13px; font-size: 15px; font-family: inherit; color: var(--color-text-primary, #08060d); background: #fcfcff; transition: border-color .15s, box-shadow .15s, background .15s; }
 .la-input input::placeholder { color: #aab0bd; }
-.la-input input:focus { outline: none; background: #fff; border-color: ${BRAND.primary}; box-shadow: 0 0 0 4px rgba(107,33,168,.15); }
+.la-input input:focus { outline: none; background: #fff; border-color: ${BRAND.primary}; box-shadow: 0 0 0 4px rgba(111,3,181,.15); }
 .la-input input.has-toggle { padding-right: 50px; }
 .la-toggle { position: absolute; right: 12px; display: grid; place-items: center; width: 34px; height: 34px; border: 0; background: transparent; color: #9aa0ad; cursor: pointer; border-radius: 8px; }
 .la-toggle:hover { color: ${BRAND.primary}; }
@@ -202,11 +222,11 @@ const LOGIN_CSS = `
 .la-box svg { width: 13px; height: 13px; color: #fff; opacity: 0; transition: opacity .12s; }
 .la-check input:checked + .la-box { background: ${BRAND.primary}; border-color: ${BRAND.primary}; }
 .la-check input:checked + .la-box svg { opacity: 1; }
-.la-check input:focus-visible + .la-box { box-shadow: 0 0 0 4px rgba(107,33,168,.2); }
+.la-check input:focus-visible + .la-box { box-shadow: 0 0 0 4px rgba(111,3,181,.2); }
 .la-link { color: ${BRAND.primary}; font-weight: 600; font-size: 14.5px; text-decoration: none; background: none; border: 0; cursor: pointer; padding: 0; font-family: inherit; }
 .la-link:hover { text-decoration: underline; }
 .la-error { color: var(--color-text-danger, #b42318); font-size: 13.5px; margin: 0 0 14px; }
-.la-btn { width: 100%; height: 54px; border: 0; border-radius: 13px; background: linear-gradient(135deg, ${BRAND.primary}, ${BRAND.primaryHover}); color: #fff; font-family: inherit; font-weight: 700; font-size: 16px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 10px; transition: transform .08s ease, box-shadow .2s ease, filter .15s; box-shadow: 0 14px 26px -12px rgba(88,28,135,.7); }
+.la-btn { width: 100%; height: 54px; border: 0; border-radius: 13px; background: linear-gradient(135deg, ${BRAND.primary}, ${BRAND.primaryHover}); color: #fff; font-family: inherit; font-weight: 700; font-size: 16px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 10px; transition: transform .08s ease, box-shadow .2s ease, filter .15s; box-shadow: 0 14px 26px -12px rgba(88,2,143,.7); }
 .la-btn:hover:not(:disabled) { filter: brightness(1.06); }
 .la-btn:active:not(:disabled) { transform: translateY(1px); }
 .la-btn:disabled { opacity: .7; cursor: default; }
@@ -405,18 +425,57 @@ function LoginScreen({ onLogin }) {
 // =======================================================================
 // Main app (shown after login)
 // =======================================================================
+const MAINAPP_CSS = `
+.ev-shell * { box-sizing: border-box; }
+.ev-shell { display: flex; min-height: 100vh; max-width: 1120px; margin: 0 auto; text-align: left; font-family: var(--sans, system-ui, sans-serif); color: #1f2233; }
+.ev-sidebar { width: 232px; flex-shrink: 0; border-right: 1px solid #ebe9f2; display: flex; flex-direction: column; padding: 20px 14px; position: sticky; top: 0; align-self: flex-start; height: 100vh; }
+.ev-logo { padding: 4px 10px 22px; }
+.ev-logo img { height: 30px; width: auto; display: block; }
+.ev-nav { display: flex; flex-direction: column; gap: 4px; }
+.ev-navitem { display: flex; align-items: center; gap: 11px; padding: 10px 12px; border-radius: 10px; font-size: 14px; color: #5b5566; background: none; border: 0; cursor: pointer; font-family: inherit; text-align: left; width: 100%; transition: background .12s, color .12s; }
+.ev-navitem i { font-size: 18px; }
+.ev-navitem:hover { background: #f5f3fa; color: #1f2233; }
+.ev-navitem.active { background: ${BRAND.light}; color: ${BRAND.text}; font-weight: 500; }
+.ev-userbox { margin-top: auto; display: flex; align-items: center; gap: 10px; padding: 10px 8px; border-top: 1px solid #ebe9f2; }
+.ev-icbtn { background: none; border: 0; cursor: pointer; color: #9a93a6; display: grid; place-items: center; padding: 6px; border-radius: 8px; }
+.ev-icbtn:hover { background: #f5f3fa; color: ${BRAND.primary}; }
+.ev-main { flex: 1; min-width: 0; padding: 26px 32px; }
+.ev-topbar { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 22px; flex-wrap: wrap; }
+.ev-h1 { font-size: 21px; font-weight: 600; margin: 0; color: #1f2233; }
+.ev-sub { font-size: 13px; color: var(--color-text-secondary, #6b6375); margin: 3px 0 0; }
+.ev-btn-primary { display: inline-flex; align-items: center; gap: 6px; background: ${BRAND.primary}; color: #fff; border: 0; border-radius: 10px; padding: 9px 15px; font-size: 14px; font-weight: 500; cursor: pointer; font-family: inherit; }
+.ev-btn-primary:hover { background: ${BRAND.primaryHover}; }
+.ev-btn-ghost { display: inline-flex; align-items: center; gap: 6px; background: #fff; color: #5b5566; border: 1px solid #e3e1ec; border-radius: 10px; padding: 8px 13px; font-size: 13px; cursor: pointer; font-family: inherit; }
+.ev-btn-ghost:hover { border-color: #cfcad9; }
+.ev-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 20px; }
+.ev-stat { background: #f7f5fb; border-radius: 12px; padding: 16px 18px; }
+.ev-stat .lab { font-size: 13px; color: var(--color-text-secondary, #6b6375); }
+.ev-stat .val { font-size: 26px; font-weight: 600; margin-top: 4px; }
+.ev-card { background: #fff; border: 1px solid #ebe9f2; border-radius: 14px; padding: 16px 18px; }
+.ev-progress { height: 8px; border-radius: 999px; background: #efedf4; overflow: hidden; }
+.ev-progress > div { height: 100%; background: ${BRAND.primary}; }
+@media (max-width: 820px) {
+  .ev-shell { flex-direction: column; min-height: 0; }
+  .ev-sidebar { width: auto; height: auto; position: static; border-right: 0; border-bottom: 1px solid #ebe9f2; flex-direction: row; align-items: center; flex-wrap: wrap; gap: 6px; padding: 12px; }
+  .ev-logo { padding: 0 8px 0 4px; }
+  .ev-nav { flex-direction: row; flex-wrap: wrap; gap: 4px; flex: 1; }
+  .ev-navitem { width: auto; padding: 8px 10px; }
+  .ev-userbox { margin-top: 0; border-top: 0; padding: 4px; }
+  .ev-main { padding: 18px 16px; }
+}
+`;
+
 function MainApp({ token, user, onLogout }) {
   const realRole = user.role; // gerçek rol: "calisan" | "yonetici"
   const isAdmin = realRole === "yonetici";
   const [previewEmployee, setPreviewEmployee] = useState(false); // admin: çalışan görünümünü önizle
   const role = isAdmin && previewEmployee ? "calisan" : realRole; // arayüzde kullanılan etkin rol
-  const [view, setView] = useState(realRole === "calisan" ? "yenitalep" : "onaylar");
+  const [view, setView] = useState("genelbakis");
 
   function togglePreview() {
     setPreviewEmployee((p) => {
-      const next = !p;
-      setView(next ? "yenitalep" : "onaylar"); // görünümü role uygun sıfırla
-      return next;
+      setView("genelbakis"); // görünümü sıfırla
+      return !p;
     });
   }
 
@@ -465,16 +524,16 @@ function MainApp({ token, user, onLogout }) {
   }, [view, calendarYear, calendarMonth, token]);
 
   const myRequests = useMemo(
-    () => requests.slice().sort((a, b) => b.id - a.id),
-    [requests]
+    () => requests.filter((r) => r.userId === user.id).sort((a, b) => b.id - a.id),
+    [requests, user.id]
   );
 
   const usedDays = useMemo(
     () =>
       requests
-        .filter((r) => r.type === "yillik" && r.status !== "reddedildi")
+        .filter((r) => r.userId === user.id && r.type === "yillik" && r.status !== "reddedildi")
         .reduce((sum, r) => sum + r.days, 0),
-    [requests]
+    [requests, user.id]
   );
 
   const pendingRequests = useMemo(
@@ -564,126 +623,152 @@ function MainApp({ token, user, onLogout }) {
   const navItems =
     role === "calisan"
       ? [
+          { id: "genelbakis", label: "Genel bakış", icon: "ti-layout-dashboard" },
           { id: "yenitalep", label: "Yeni talep", icon: "ti-plus" },
           { id: "taleplerim", label: "Taleplerim", icon: "ti-clipboard-list" },
           { id: "takvim", label: "Takım takvimi", icon: "ti-calendar" },
         ]
       : [
+          { id: "genelbakis", label: "Genel bakış", icon: "ti-layout-dashboard" },
           { id: "onaylar", label: "Onay bekleyenler", icon: "ti-clipboard-check" },
           { id: "tumtalepler", label: "Tüm talepler", icon: "ti-list" },
           { id: "takvim", label: "Takım takvimi", icon: "ti-calendar" },
         ];
 
+  const firstName = (user.name || "").split(" ")[0];
+  const VIEW_TITLES = {
+    genelbakis: [`Merhaba, ${firstName}`, "İzin durumun ve son hareketler"],
+    yenitalep: ["Yeni talep", "İzin talebi oluştur"],
+    taleplerim: ["Taleplerim", "Oluşturduğun izin talepleri"],
+    onaylar: ["Onay bekleyenler", "İncelenecek talepler"],
+    tumtalepler: ["Tüm talepler", "Tüm çalışanların talepleri"],
+    takvim: ["Takım takvimi", "Onaylı izinler"],
+  };
+  const [pageTitle, pageSub] = VIEW_TITLES[view] || ["İzin yönetimi", ""];
+
   return (
-    <div style={{ fontFamily: "var(--font-sans)", color: "var(--color-text-primary)", maxWidth: 720, margin: "0 auto" }}>
-      {/* Top bar */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1.5rem", flexWrap: "wrap", gap: "12px" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-          <img src={logo} alt="SmartAlpha" style={{ height: 28 }} />
-          <div>
-            <h2 style={{ margin: 0 }}>İzin yönetimi</h2>
-            <p style={{ margin: "4px 0 0", fontSize: "13px", color: "var(--color-text-secondary)" }}>
-              {role === "yonetici" ? "Yönetici paneli" : "Çalışan paneli"}
-            </p>
+    <div className="ev-shell">
+      <style>{MAINAPP_CSS}</style>
+
+      <aside className="ev-sidebar">
+        <div className="ev-logo"><img src={logo} alt="SmartAlpha" /></div>
+        <nav className="ev-nav">
+          {navItems.map((item) => (
+            <button
+              key={item.id}
+              className={`ev-navitem${view === item.id ? " active" : ""}`}
+              onClick={() => setView(item.id)}
+            >
+              <i className={`ti ${item.icon}`} aria-hidden="true"></i>
+              {item.label}
+            </button>
+          ))}
+        </nav>
+        <div className="ev-userbox">
+          <Avatar user={user} size={34} />
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div style={{ fontSize: 13, fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{user.name}</div>
+            <div style={{ fontSize: 12, color: "#9a93a6" }}>{realRole === "yonetici" ? "Yönetici" : "Çalışan"}</div>
           </div>
+          <button className="ev-icbtn" onClick={onLogout} aria-label="Çıkış yap" title="Çıkış yap">
+            <i className="ti ti-logout" style={{ fontSize: 18 }}></i>
+          </button>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+      </aside>
+
+      <main className="ev-main">
+        <div className="ev-topbar">
+          <div>
+            <h1 className="ev-h1">{pageTitle}</h1>
+            <p className="ev-sub">{pageSub}</p>
+          </div>
           {isAdmin && (
-            <button onClick={togglePreview} style={{ fontSize: 13, padding: "6px 12px", display: "flex", alignItems: "center", gap: 6 }}>
-              <i className={`ti ${previewEmployee ? "ti-arrow-back-up" : "ti-eye"}`} style={{ fontSize: 14 }} aria-hidden="true"></i>
-              {previewEmployee ? "Yönetici görünümüne dön" : "Çalışan görünümü"}
+            <button className="ev-btn-ghost" onClick={togglePreview}>
+              <i className={`ti ${previewEmployee ? "ti-arrow-back-up" : "ti-eye"}`} aria-hidden="true"></i>
+              {previewEmployee ? "Yönetici görünümü" : "Çalışan görünümü"}
             </button>
           )}
-          <Avatar user={user} size={34} />
-          <span style={{ fontSize: 14, fontWeight: 500 }}>{user.name}</span>
-          <button onClick={onLogout} style={{ fontSize: 13, padding: "6px 12px", display: "flex", alignItems: "center", gap: 6 }}>
-            <i className="ti ti-logout" style={{ fontSize: 14 }} aria-hidden="true"></i>
-            Çıkış yap
-          </button>
         </div>
-      </div>
 
-      {previewEmployee && (
-        <div style={{
-          background: BRAND.light, color: BRAND.text,
-          borderRadius: "var(--border-radius-md)", padding: "8px 14px",
-          marginBottom: "1rem", fontSize: 13, display: "flex", alignItems: "center", gap: 8
-        }}>
-          <i className="ti ti-eye" aria-hidden="true"></i>
-          Önizleme: çalışan görünümü — verileriniz değişmez. Sağ üstten yönetici görünümüne dönebilirsiniz.
-        </div>
-      )}
-
-      {error && (
-        <div style={{
-          background: "var(--color-background-danger)",
-          color: "var(--color-text-danger)",
-          border: "0.5px solid var(--color-border-danger)",
-          borderRadius: "var(--border-radius-md)",
-          padding: "10px 14px", marginBottom: "1rem", fontSize: 14
-        }}>
-          {error}
-        </div>
-      )}
-
-      {/* User summary card (employee only) */}
-      {role === "calisan" && (
-        <div style={{
-          display: "flex", alignItems: "center", gap: "16px",
-          background: "var(--color-background-primary)",
-          border: "0.5px solid var(--color-border-tertiary)",
-          borderRadius: "var(--border-radius-lg)",
-          padding: "1rem 1.25rem", marginBottom: "1.5rem", flexWrap: "wrap"
-        }}>
-          <Avatar user={user} size={44} />
-          <div style={{ flex: 1 }}>
-            <p style={{ margin: 0, fontWeight: 500, fontSize: 15 }}>{user.name}</p>
-            <p style={{ margin: "2px 0 0", fontSize: 13, color: "var(--color-text-secondary)" }}>Çalışan</p>
+        {previewEmployee && (
+          <div style={{
+            background: BRAND.light, color: BRAND.text,
+            borderRadius: 10, padding: "8px 14px",
+            marginBottom: "1rem", fontSize: 13, display: "flex", alignItems: "center", gap: 8
+          }}>
+            <i className="ti ti-eye" aria-hidden="true"></i>
+            Önizleme: çalışan görünümü — verileriniz değişmez.
           </div>
-          <div style={{ display: "flex", gap: "12px" }}>
-            <div style={{ background: "var(--color-background-secondary)", borderRadius: "var(--border-radius-md)", padding: "10px 16px", textAlign: "center" }}>
-              <div style={{ fontSize: 13, color: "var(--color-text-secondary)" }}>Yıllık hak</div>
-              <div style={{ fontSize: 20, fontWeight: 500 }}>{user.balance}</div>
-            </div>
-            <div style={{ background: "var(--color-background-secondary)", borderRadius: "var(--border-radius-md)", padding: "10px 16px", textAlign: "center" }}>
-              <div style={{ fontSize: 13, color: "var(--color-text-secondary)" }}>Kullanılan</div>
-              <div style={{ fontSize: 20, fontWeight: 500 }}>{usedDays}</div>
-            </div>
-            <div style={{ background: "var(--color-background-secondary)", borderRadius: "var(--border-radius-md)", padding: "10px 16px", textAlign: "center" }}>
-              <div style={{ fontSize: 13, color: "var(--color-text-secondary)" }}>Kalan</div>
-              <div style={{ fontSize: 20, fontWeight: 500 }}>{Math.max(0, user.balance - usedDays)}</div>
-            </div>
+        )}
+
+        {error && (
+          <div style={{
+            background: "var(--color-background-danger, #fdecea)",
+            color: "var(--color-text-danger, #b42318)",
+            border: "1px solid #f3c8c2",
+            borderRadius: 10, padding: "10px 14px", marginBottom: "1rem", fontSize: 14
+          }}>
+            {error}
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Nav tabs */}
-      <div style={{ display: "flex", gap: "8px", marginBottom: "1.5rem", borderBottom: "0.5px solid var(--color-border-tertiary)", paddingBottom: "8px" }}>
-        {navItems.map((item) => (
-          <button
-            key={item.id}
-            onClick={() => setView(item.id)}
-            style={{
-              border: "none",
-              background: view === item.id ? BRAND.light : "transparent",
-              borderRadius: "var(--border-radius-md)",
-              padding: "8px 14px",
-              fontSize: 14,
-              fontWeight: view === item.id ? 500 : 400,
-              cursor: "pointer",
-              color: view === item.id ? BRAND.text : "var(--color-text-primary)",
-              display: "flex", alignItems: "center", gap: 6,
-            }}
-          >
-            <i className={`ti ${item.icon}`} style={{ fontSize: 16 }} aria-hidden="true"></i>
-            {item.label}
-          </button>
-        ))}
-      </div>
+        {actionError && (
+          <p style={{ fontSize: 13, color: "var(--color-text-danger, #b42318)", marginBottom: 12 }}>{actionError}</p>
+        )}
 
-      {actionError && (
-        <p style={{ fontSize: 13, color: "var(--color-text-danger)", marginBottom: 12 }}>{actionError}</p>
-      )}
+        {/* ---- Genel bakış ---- */}
+        {view === "genelbakis" && role === "calisan" && (
+          <div>
+            <div className="ev-stats">
+              <div className="ev-stat"><div className="lab">Yıllık hak</div><div className="val">{user.balance}</div></div>
+              <div className="ev-stat"><div className="lab">Kullanılan</div><div className="val">{usedDays}</div></div>
+              <div className="ev-stat"><div className="lab">Kalan</div><div className="val" style={{ color: BRAND.primary }}>{Math.max(0, user.balance - usedDays)}</div></div>
+            </div>
+            <div className="ev-card" style={{ marginBottom: 22 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "var(--color-text-secondary)", marginBottom: 6 }}>
+                <span>Kullanım</span><span>{usedDays} / {user.balance} gün</span>
+              </div>
+              <div className="ev-progress"><div style={{ width: `${Math.min(100, Math.round((usedDays / Math.max(1, user.balance)) * 100))}%` }}></div></div>
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+              <div style={{ fontSize: 13, fontWeight: 500, color: "var(--color-text-secondary)" }}>Son talepler</div>
+              <button className="ev-btn-ghost" onClick={() => setView("yenitalep")}><i className="ti ti-plus" aria-hidden="true"></i>Yeni talep</button>
+            </div>
+            {myRequests.length === 0 ? (
+              <div className="ev-card" style={{ color: "#9a93a6", fontSize: 14 }}>Henüz izin talebin yok.</div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {myRequests.slice(0, 4).map((r) => <MiniRequest key={r.id} r={r} />)}
+              </div>
+            )}
+          </div>
+        )}
+
+        {view === "genelbakis" && role === "yonetici" && (
+          <div>
+            <div className="ev-stats">
+              <div className="ev-stat"><div className="lab">Bekleyen onay</div><div className="val" style={{ color: BRAND.primary }}>{pendingRequests.length}</div></div>
+              <div className="ev-stat"><div className="lab">Toplam çalışan</div><div className="val">{employees.length}</div></div>
+              <div className="ev-stat"><div className="lab">Onaylanan</div><div className="val">{requests.filter((r) => r.status === "onaylandi").length}</div></div>
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+              <div style={{ fontSize: 13, fontWeight: 500, color: "var(--color-text-secondary)" }}>Onay bekleyenler</div>
+              {pendingRequests.length > 0 && (
+                <button className="ev-btn-ghost" onClick={() => setView("onaylar")}>Tümünü gör</button>
+              )}
+            </div>
+            {pendingRequests.length === 0 ? (
+              <div className="ev-card" style={{ color: "#9a93a6", fontSize: 14 }}>Bekleyen talep yok.</div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {pendingRequests.slice(0, 4).map((r) => {
+                  const emp = employees.find((u) => u.id === r.userId);
+                  return <MiniRequest key={r.id} r={r} name={emp ? emp.name : "Çalışan"} />;
+                })}
+              </div>
+            )}
+          </div>
+        )}
 
       {/* ---- Yeni talep form ---- */}
       {view === "yenitalep" && (
@@ -941,6 +1026,7 @@ function MainApp({ token, user, onLogout }) {
           </div>
         </div>
       )}
+      </main>
     </div>
   );
 }
