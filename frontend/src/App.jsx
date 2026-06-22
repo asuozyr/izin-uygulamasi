@@ -427,8 +427,8 @@ function LoginScreen({ onLogin }) {
 // =======================================================================
 const MAINAPP_CSS = `
 .ev-shell * { box-sizing: border-box; }
-.ev-shell { display: flex; min-height: 100vh; max-width: 1120px; margin: 0 auto; text-align: left; font-family: var(--sans, system-ui, sans-serif); color: #1f2233; }
-.ev-sidebar { width: 232px; flex-shrink: 0; border-right: 1px solid #ebe9f2; display: flex; flex-direction: column; padding: 20px 14px; position: sticky; top: 0; align-self: flex-start; height: 100vh; }
+.ev-shell { display: flex; width: 100%; flex: 1; min-height: 100vh; text-align: left; font-family: var(--sans, system-ui, sans-serif); color: #1f2233; }
+.ev-sidebar { width: 280px; flex-shrink: 0; border-right: 1px solid #ebe9f2; display: flex; flex-direction: column; padding: 22px 16px; position: sticky; top: 0; align-self: flex-start; height: 100vh; }
 .ev-logo { padding: 4px 10px 22px; }
 .ev-logo img { height: 30px; width: auto; display: block; }
 .ev-nav { display: flex; flex-direction: column; gap: 4px; }
@@ -439,7 +439,7 @@ const MAINAPP_CSS = `
 .ev-userbox { margin-top: auto; display: flex; align-items: center; gap: 10px; padding: 10px 8px; border-top: 1px solid #ebe9f2; }
 .ev-icbtn { background: none; border: 0; cursor: pointer; color: #9a93a6; display: grid; place-items: center; padding: 6px; border-radius: 8px; }
 .ev-icbtn:hover { background: #f5f3fa; color: ${BRAND.primary}; }
-.ev-main { flex: 1; min-width: 0; padding: 26px 32px; }
+.ev-main { flex: 1; min-width: 0; padding: 28px 40px; }
 .ev-topbar { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 22px; flex-wrap: wrap; }
 .ev-h1 { font-size: 21px; font-weight: 600; margin: 0; color: #1f2233; }
 .ev-sub { font-size: 13px; color: var(--color-text-secondary, #6b6375); margin: 3px 0 0; }
@@ -615,6 +615,9 @@ function MainApp({ token, user, onLogout }) {
       setCalendarMonth((m) => m + 1);
     }
   }
+
+  function goToPrevYear() { setCalendarYear((y) => y - 1); }
+  function goToNextYear() { setCalendarYear((y) => y + 1); }
 
   const firstDay = new Date(calendarYear, calendarMonth - 1, 1);
   const startWeekday = (firstDay.getDay() + 6) % 7; // Monday=0
@@ -793,11 +796,11 @@ function MainApp({ token, user, onLogout }) {
                 <input type="date" value={form.returnDate} onChange={(e) => setForm({ ...form, returnDate: e.target.value })} style={{ width: "100%" }} />
               </div>
               <div>
-                <label style={{ fontSize: 13, color: "var(--color-text-secondary)", display: "block", marginBottom: 4 }}>Başlangıç tarihi</label>
+                <label style={{ fontSize: 13, color: "var(--color-text-secondary)", display: "block", marginBottom: 4 }}>İzin başlangıç tarihi</label>
                 <input type="date" value={form.start} onChange={(e) => setForm({ ...form, start: e.target.value })} style={{ width: "100%" }} />
               </div>
               <div>
-                <label style={{ fontSize: 13, color: "var(--color-text-secondary)", display: "block", marginBottom: 4 }}>Bitiş tarihi</label>
+                <label style={{ fontSize: 13, color: "var(--color-text-secondary)", display: "block", marginBottom: 4 }}>İzin bitiş tarihi</label>
                 <input type="date" value={form.end} onChange={(e) => setForm({ ...form, end: e.target.value })} style={{ width: "100%" }} />
               </div>
               <div>
@@ -967,16 +970,28 @@ function MainApp({ token, user, onLogout }) {
       {/* ---- Takvim ---- */}
       {view === "takvim" && (
         <div>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-            <button onClick={goToPrevMonth} style={{ fontSize: 13, padding: "4px 10px", display: "flex", alignItems: "center", gap: 4 }}>
-              <i className="ti ti-chevron-left" style={{ fontSize: 14 }} aria-hidden="true"></i>
-              Önceki
-            </button>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12, gap: 8, flexWrap: "wrap" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <button onClick={goToPrevYear} style={{ fontSize: 13, padding: "4px 9px", display: "flex", alignItems: "center", gap: 3 }} title="Önceki yıl" aria-label="Önceki yıl">
+                <i className="ti ti-chevrons-left" style={{ fontSize: 14 }} aria-hidden="true"></i>
+                Yıl
+              </button>
+              <button onClick={goToPrevMonth} style={{ fontSize: 13, padding: "4px 10px", display: "flex", alignItems: "center", gap: 4 }} title="Önceki ay">
+                <i className="ti ti-chevron-left" style={{ fontSize: 14 }} aria-hidden="true"></i>
+                Ay
+              </button>
+            </div>
             <p style={{ fontSize: 14, fontWeight: 500, margin: 0 }}>{MONTH_NAMES[calendarMonth - 1]} {calendarYear}</p>
-            <button onClick={goToNextMonth} style={{ fontSize: 13, padding: "4px 10px", display: "flex", alignItems: "center", gap: 4 }}>
-              Sonraki
-              <i className="ti ti-chevron-right" style={{ fontSize: 14 }} aria-hidden="true"></i>
-            </button>
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <button onClick={goToNextMonth} style={{ fontSize: 13, padding: "4px 10px", display: "flex", alignItems: "center", gap: 4 }} title="Sonraki ay">
+                Ay
+                <i className="ti ti-chevron-right" style={{ fontSize: 14 }} aria-hidden="true"></i>
+              </button>
+              <button onClick={goToNextYear} style={{ fontSize: 13, padding: "4px 9px", display: "flex", alignItems: "center", gap: 3 }} title="Sonraki yıl" aria-label="Sonraki yıl">
+                Yıl
+                <i className="ti ti-chevrons-right" style={{ fontSize: 14 }} aria-hidden="true"></i>
+              </button>
+            </div>
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4, marginBottom: 4 }}>
             {["Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Paz"].map((d) => (
