@@ -488,10 +488,20 @@ function MainApp({ token, user, onLogout }) {
 
   const [form, setForm] = useState({
     type: "yillik", start: "", end: "", startTime: "", endTime: "",
-    returnDate: "", location: "", contactPhone: "", reason: "",
+    returnDate: "", location: "", countryCode: "+90", contactPhone: "", reason: "",
   });
+  const [fieldErrors, setFieldErrors] = useState({});
   const [formError, setFormError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+
+  // Form alanı değişince ilgili hatayı temizle
+  function updateField(name, value) {
+    setForm((f) => ({ ...f, [name]: value }));
+    setFieldErrors((fe) => (fe[name] ? { ...fe, [name]: undefined } : fe));
+  }
+  const ERR_COLOR = "#e24b4a";
+  const errStyle = (name) =>
+    fieldErrors[name] ? { border: `1px solid ${ERR_COLOR}`, borderRadius: "var(--border-radius-md)" } : {};
 
   const now = new Date();
   const [calendarYear, setCalendarYear] = useState(now.getFullYear());
@@ -541,15 +551,40 @@ function MainApp({ token, user, onLogout }) {
     [requests]
   );
 
+  // Telefon: yalnız rakam, +, boşluk, parantez, tire; ülke kodu dahil 8-15 rakam
+  function phoneError(countryCode, number) {
+    const full = `${countryCode || ""} ${number || ""}`.trim();
+    if (!number || !number.trim()) return "Bu alan zorunlu.";
+    if (!/^[0-9+\s()\-]+$/.test(full)) return "Lütfen geçerli bir telefon numarası girin.";
+    const digits = full.replace(/\D/g, "");
+    if (digits.length < 8 || digits.length > 15) return "Lütfen geçerli bir telefon numarası girin.";
+    return null;
+  }
+
+  function validateForm() {
+    const errs = {};
+    if (!form.type) errs.type = "Bu alan zorunlu.";
+    if (!form.returnDate) errs.returnDate = "Bu alan zorunlu.";
+    if (!form.start) errs.start = "Bu alan zorunlu.";
+    if (!form.end) errs.end = "Bu alan zorunlu.";
+    if (form.start && form.end && new Date(form.end) < new Date(form.start)) {
+      errs.end = "Bitiş tarihi başlangıçtan önce olamaz.";
+    }
+    if (!form.startTime) errs.startTime = "Bu alan zorunlu.";
+    if (!form.endTime) errs.endTime = "Bu alan zorunlu.";
+    if (!form.location || !form.location.trim()) errs.location = "Bu alan zorunlu.";
+    const pErr = phoneError(form.countryCode, form.contactPhone);
+    if (pErr) errs.contactPhone = pErr;
+    return errs;
+  }
+
   async function submitRequest(e) {
     e.preventDefault();
     setFormError("");
-    if (!form.start || !form.end) {
-      setFormError("Lütfen başlangıç ve bitiş tarihi seçin.");
-      return;
-    }
-    if (new Date(form.end) < new Date(form.start)) {
-      setFormError("Bitiş tarihi başlangıçtan önce olamaz.");
+    const errs = validateForm();
+    setFieldErrors(errs);
+    if (Object.keys(errs).length > 0) {
+      setFormError("Lütfen işaretli alanları düzeltin.");
       return;
     }
     setSubmitting(true);
@@ -561,14 +596,15 @@ function MainApp({ token, user, onLogout }) {
         startTime: form.startTime,
         endTime: form.endTime,
         returnDate: form.returnDate,
-        location: form.location,
-        contactPhone: form.contactPhone,
+        location: form.location.trim(),
+        contactPhone: `${form.countryCode} ${form.contactPhone}`.trim(),
         reason: form.reason,
       });
       setForm({
         type: "yillik", start: "", end: "", startTime: "", endTime: "",
-        returnDate: "", location: "", contactPhone: "", reason: "",
+        returnDate: "", location: "", countryCode: "+90", contactPhone: "", reason: "",
       });
+      setFieldErrors({});
       setView("taleplerim");
       refreshRequests();
     } catch (err) {
@@ -785,43 +821,74 @@ function MainApp({ token, user, onLogout }) {
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "12px" }}>
               <div>
                 <label style={{ fontSize: 13, color: "var(--color-text-secondary)", display: "block", marginBottom: 4 }}>İzin türü</label>
-                <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })} style={{ width: "100%" }}>
+                <select value={form.type} onChange={(e) => updateField("type", e.target.value)} style={{ width: "100%", ...errStyle("type") }}>
                   {Object.entries(LEAVE_TYPES).map(([key, val]) => (
                     <option key={key} value={key}>{val.label}</option>
                   ))}
                 </select>
+                {fieldErrors.type && <p style={{ color: ERR_COLOR, fontSize: 12, margin: "4px 0 0" }}>{fieldErrors.type}</p>}
               </div>
               <div>
                 <label style={{ fontSize: 13, color: "var(--color-text-secondary)", display: "block", marginBottom: 4 }}>Çalışmaya başlanacak tarih</label>
-                <input type="date" value={form.returnDate} onChange={(e) => setForm({ ...form, returnDate: e.target.value })} style={{ width: "100%" }} />
+                <input type="date" value={form.returnDate} onChange={(e) => updateField("returnDate", e.target.value)} style={{ width: "100%", ...errStyle("returnDate") }} />
+                {fieldErrors.returnDate && <p style={{ color: ERR_COLOR, fontSize: 12, margin: "4px 0 0" }}>{fieldErrors.returnDate}</p>}
               </div>
               <div>
                 <label style={{ fontSize: 13, color: "var(--color-text-secondary)", display: "block", marginBottom: 4 }}>İzin başlangıç tarihi</label>
-                <input type="date" value={form.start} onChange={(e) => setForm({ ...form, start: e.target.value })} style={{ width: "100%" }} />
+                <input type="date" value={form.start} onChange={(e) => updateField("start", e.target.value)} style={{ width: "100%", ...errStyle("start") }} />
+                {fieldErrors.start && <p style={{ color: ERR_COLOR, fontSize: 12, margin: "4px 0 0" }}>{fieldErrors.start}</p>}
               </div>
               <div>
                 <label style={{ fontSize: 13, color: "var(--color-text-secondary)", display: "block", marginBottom: 4 }}>İzin bitiş tarihi</label>
-                <input type="date" value={form.end} onChange={(e) => setForm({ ...form, end: e.target.value })} style={{ width: "100%" }} />
+                <input type="date" value={form.end} onChange={(e) => updateField("end", e.target.value)} style={{ width: "100%", ...errStyle("end") }} />
+                {fieldErrors.end && <p style={{ color: ERR_COLOR, fontSize: 12, margin: "4px 0 0" }}>{fieldErrors.end}</p>}
               </div>
               <div>
                 <label style={{ fontSize: 13, color: "var(--color-text-secondary)", display: "block", marginBottom: 4 }}>Başlangıç saati</label>
-                <input type="time" value={form.startTime} onChange={(e) => setForm({ ...form, startTime: e.target.value })} style={{ width: "100%" }} />
+                <input type="time" value={form.startTime} onChange={(e) => updateField("startTime", e.target.value)} style={{ width: "100%", ...errStyle("startTime") }} />
+                {fieldErrors.startTime && <p style={{ color: ERR_COLOR, fontSize: 12, margin: "4px 0 0" }}>{fieldErrors.startTime}</p>}
               </div>
               <div>
                 <label style={{ fontSize: 13, color: "var(--color-text-secondary)", display: "block", marginBottom: 4 }}>Bitiş saati</label>
-                <input type="time" value={form.endTime} onChange={(e) => setForm({ ...form, endTime: e.target.value })} style={{ width: "100%" }} />
+                <input type="time" value={form.endTime} onChange={(e) => updateField("endTime", e.target.value)} style={{ width: "100%", ...errStyle("endTime") }} />
+                {fieldErrors.endTime && <p style={{ color: ERR_COLOR, fontSize: 12, margin: "4px 0 0" }}>{fieldErrors.endTime}</p>}
               </div>
               <div>
                 <label style={{ fontSize: 13, color: "var(--color-text-secondary)", display: "block", marginBottom: 4 }}>İzin geçirilecek yer</label>
-                <input type="text" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })}
+                <input type="text" value={form.location} onChange={(e) => updateField("location", e.target.value)}
                   placeholder="Örn. İzmir, memleket"
-                  style={{ width: "100%", fontFamily: "inherit", fontSize: 14, padding: "6px 10px", borderRadius: "var(--border-radius-md)", border: "1px solid #cfcfd6", boxSizing: "border-box" }} />
+                  style={{ width: "100%", fontFamily: "inherit", fontSize: 14, padding: "6px 10px", borderRadius: "var(--border-radius-md)", border: `1px solid ${fieldErrors.location ? ERR_COLOR : "#cfcfd6"}`, boxSizing: "border-box" }} />
+                {fieldErrors.location && <p style={{ color: ERR_COLOR, fontSize: 12, margin: "4px 0 0" }}>{fieldErrors.location}</p>}
               </div>
               <div>
                 <label style={{ fontSize: 13, color: "var(--color-text-secondary)", display: "block", marginBottom: 4 }}>Ulaşılabilecek telefon</label>
-                <input type="tel" value={form.contactPhone} onChange={(e) => setForm({ ...form, contactPhone: e.target.value })}
-                  placeholder="05xx xxx xx xx"
-                  style={{ width: "100%", fontFamily: "inherit", fontSize: 14, padding: "6px 10px", borderRadius: "var(--border-radius-md)", border: "1px solid #cfcfd6", boxSizing: "border-box" }} />
+                <div style={{ display: "flex", gap: 6 }}>
+                  <input type="text" list="ulke-kodlari" value={form.countryCode} onChange={(e) => updateField("countryCode", e.target.value)}
+                    aria-label="Ülke kodu"
+                    style={{ width: 78, flexShrink: 0, fontFamily: "inherit", fontSize: 14, padding: "6px 8px", borderRadius: "var(--border-radius-md)", border: `1px solid ${fieldErrors.contactPhone ? ERR_COLOR : "#cfcfd6"}`, boxSizing: "border-box" }} />
+                  <input type="tel" value={form.contactPhone} onChange={(e) => updateField("contactPhone", e.target.value)}
+                    placeholder="5xx xxx xx xx"
+                    style={{ flex: 1, minWidth: 0, fontFamily: "inherit", fontSize: 14, padding: "6px 10px", borderRadius: "var(--border-radius-md)", border: `1px solid ${fieldErrors.contactPhone ? ERR_COLOR : "#cfcfd6"}`, boxSizing: "border-box" }} />
+                  <datalist id="ulke-kodlari">
+                    <option value="+90">Türkiye</option>
+                    <option value="+1">ABD / Kanada</option>
+                    <option value="+44">Birleşik Krallık</option>
+                    <option value="+49">Almanya</option>
+                    <option value="+33">Fransa</option>
+                    <option value="+31">Hollanda</option>
+                    <option value="+39">İtalya</option>
+                    <option value="+34">İspanya</option>
+                    <option value="+41">İsviçre</option>
+                    <option value="+43">Avusturya</option>
+                    <option value="+32">Belçika</option>
+                    <option value="+7">Rusya</option>
+                    <option value="+971">BAE</option>
+                    <option value="+966">S. Arabistan</option>
+                    <option value="+994">Azerbaycan</option>
+                  </datalist>
+                </div>
+                <p style={{ fontSize: 11.5, color: "var(--color-text-tertiary)", margin: "4px 0 0" }}>Örn. +90 5xx xxx xx xx</p>
+                {fieldErrors.contactPhone && <p style={{ color: ERR_COLOR, fontSize: 12, margin: "4px 0 0" }}>{fieldErrors.contactPhone}</p>}
               </div>
             </div>
             <div style={{ marginBottom: "12px" }}>
