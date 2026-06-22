@@ -22,6 +22,7 @@ const STATUS = {
   beklemede: { label: "Beklemede", color: "c-amber" },
   onaylandi: { label: "Onaylandı", color: "c-green" },
   reddedildi: { label: "Reddedildi", color: "c-red" },
+  iptal: { label: "İptal edildi", color: "c-pink" },
 };
 
 const RAMP_COLORS = {
@@ -31,6 +32,7 @@ const RAMP_COLORS = {
   "c-gray": { bg: "#F1EFE8", fg: "#444441" },
   "c-green": { bg: "#EAF3DE", fg: "#27500A" },
   "c-red": { bg: "#FCEBEB", fg: "#791F1F" },
+  "c-pink": { bg: "#FBEAF0", fg: "#72243E" },
 };
 
 const MONTH_NAMES = [
@@ -541,7 +543,7 @@ function MainApp({ token, user, onLogout }) {
   const usedDays = useMemo(
     () =>
       requests
-        .filter((r) => r.userId === user.id && r.type === "yillik" && r.status !== "reddedildi")
+        .filter((r) => r.userId === user.id && r.type === "yillik" && r.status !== "reddedildi" && r.status !== "iptal")
         .reduce((sum, r) => sum + r.days, 0),
     [requests, user.id]
   );
@@ -618,6 +620,18 @@ function MainApp({ token, user, onLogout }) {
     setActionError("");
     try {
       await api.updateRequestStatus(token, id, decision);
+      refreshRequests();
+    } catch (err) {
+      setActionError(err.message);
+    }
+  }
+
+  // Yönetici: hatalı/yanlış bir talebi iptal eder (silmez, "iptal" durumuna alır)
+  async function cancelByAdmin(id) {
+    if (!window.confirm("Bu izin talebini iptal etmek istediğinize emin misiniz?")) return;
+    setActionError("");
+    try {
+      await api.updateRequestStatus(token, id, "iptal");
       refreshRequests();
     } catch (err) {
       setActionError(err.message);
@@ -1026,7 +1040,15 @@ function MainApp({ token, user, onLogout }) {
                   <ColorBadge text={LEAVE_TYPES[r.type].label} ramp={LEAVE_TYPES[r.type].color} />
                   <span style={{ fontSize: 13, color: "var(--color-text-secondary)" }}>{formatDate(r.start)} – {formatDate(r.end)} ({r.days} gün)</span>
                 </div>
-                <ColorBadge text={STATUS[r.status].label} ramp={STATUS[r.status].color} />
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <ColorBadge text={STATUS[r.status].label} ramp={STATUS[r.status].color} />
+                  {realRole === "yonetici" && !previewEmployee && (r.status === "beklemede" || r.status === "onaylandi") && (
+                    <button onClick={() => cancelByAdmin(r.id)} title="Talebi iptal et"
+                      style={{ fontSize: 13, padding: "4px 12px", display: "flex", alignItems: "center", gap: 4, color: "#a32d2d", borderColor: "#e7a9a9" }}>
+                      <i className="ti ti-ban" style={{ fontSize: 14 }} aria-hidden="true"></i> İptal et
+                    </button>
+                  )}
+                </div>
                 <RequestExtra r={r} />
               </div>
             );

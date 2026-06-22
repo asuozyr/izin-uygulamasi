@@ -71,7 +71,7 @@ function diffDays(start, end) {
 }
 
 const VALID_TYPES = ["yillik", "mazeret", "hastalik", "ucretsiz"];
-const VALID_STATUSES = ["beklemede", "onaylandi", "reddedildi"];
+const VALID_STATUSES = ["beklemede", "onaylandi", "reddedildi", "iptal"];
 
 function publicUser(row) {
   return {
