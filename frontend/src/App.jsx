@@ -455,7 +455,9 @@ const MAINAPP_CSS = `
 .ev-navitem i { font-size: 18px; }
 .ev-navitem:hover { background: var(--surface-hover); color: var(--color-text-primary); }
 .ev-navitem.active { background: var(--accent-bg); color: var(--accent); font-weight: 500; }
-.ev-userbox { margin-top: auto; display: flex; align-items: center; gap: 10px; padding: 10px 8px; border-top: 1px solid var(--color-border-tertiary); }
+.ev-userbox { margin-top: auto; display: flex; flex-direction: column; align-items: stretch; gap: 10px; padding: 12px 8px; border-top: 1px solid var(--color-border-tertiary); }
+.ev-logout { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; background: var(--color-background-primary); color: var(--color-text-secondary); border: 1px solid var(--color-border-secondary); border-radius: 10px; padding: 8px 12px; font-size: 13px; font-weight: 500; cursor: pointer; font-family: inherit; transition: background .12s, border-color .12s, color .12s; }
+.ev-logout:hover { background: var(--surface-hover); border-color: var(--color-text-tertiary); color: var(--color-text-primary); }
 .ev-icbtn { background: none; border: 0; cursor: pointer; color: var(--color-text-tertiary); display: grid; place-items: center; padding: 6px; border-radius: 8px; }
 .ev-icbtn:hover { background: var(--surface-hover); color: var(--accent); }
 .ev-main { flex: 1; min-width: 0; padding: 28px 40px; }
@@ -839,13 +841,16 @@ function MainApp({ token, user, onLogout }) {
           ))}
         </nav>
         <div className="ev-userbox">
-          <Avatar user={user} size={34} />
-          <div style={{ minWidth: 0, flex: 1 }}>
-            <div style={{ fontSize: 13, fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{user.name}</div>
-            <div style={{ fontSize: 12, color: "var(--color-text-tertiary)" }}>{realRole === "yonetici" ? "Yönetici" : "Çalışan"}</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", minWidth: 0 }}>
+            <Avatar user={user} size={34} />
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <div style={{ fontSize: 13, fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{user.name}</div>
+              <div style={{ fontSize: 12, color: "var(--color-text-tertiary)" }}>{realRole === "yonetici" ? "Yönetici" : "Çalışan"}</div>
+            </div>
           </div>
-          <button className="ev-icbtn" onClick={onLogout} aria-label="Çıkış yap" title="Çıkış yap">
-            <i className="ti ti-logout" style={{ fontSize: 18 }}></i>
+          <button className="ev-logout" onClick={onLogout} aria-label="Çıkış yap" title="Çıkış yap">
+            <i className="ti ti-logout" style={{ fontSize: 16 }} aria-hidden="true"></i>
+            Çıkış yap
           </button>
         </div>
       </aside>
