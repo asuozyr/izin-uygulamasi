@@ -22,6 +22,8 @@ CREATE TABLE IF NOT EXISTS leave_requests (
   reason      TEXT,
   status      TEXT NOT NULL DEFAULT 'beklemede'
               CHECK (status IN ('beklemede', 'onaylandi', 'reddedildi', 'iptal')),
+  source              TEXT NOT NULL DEFAULT 'self',
+  created_by_admin_id TEXT REFERENCES employees(id),
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 

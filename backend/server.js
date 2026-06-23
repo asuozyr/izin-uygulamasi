@@ -391,8 +391,54 @@ app.post("/api/requests", requireAuth, async (req, res) => {
   }
 });
 
-// PATCH /api/requests/:id  body: { status }
-// - Managers can set any status on any request.
+// POST /api/admin/requests  (yalnızca yönetici)
+// Yönetici bir çalışan adına izin kaydı oluşturur; otomatik "onaylandi" olur.
+// body: { userId, type, start, end, returnDate, startTime?, endTime?, location?, contactPhone?, reason? }
+app.post("/api/admin/requests", requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const { userId, type, start, end, reason, startTime, endTime, returnDate, location, contactPhone } = req.body;
+
+    if (!userId || !type || !start || !end || !returnDate) {
+      return res.status(400).json({ error: "Eksik alanlar var (çalışan, izin türü, başlangıç, bitiş ve işe dönüş tarihi zorunlu)." });
+    }
+    if (!VALID_TYPES.includes(type)) {
+      return res.status(400).json({ error: "Geçersiz izin türü." });
+    }
+    if (new Date(end) < new Date(start)) {
+      return res.status(400).json({ error: "Bitiş tarihi başlangıçtan önce olamaz." });
+    }
+
+    const { rows: empRows } = await pool.query("SELECT id FROM employees WHERE id = $1", [userId]);
+    if (empRows.length === 0) {
+      return res.status(404).json({ error: "Çalışan bulunamadı." });
+    }
+
+    const days = diffDays(start, end);
+
+    const { rows } = await pool.query(
+      `INSERT INTO leave_requests
+         (user_id, type, start_date, end_date, days, reason, start_time, end_time, return_date, location, contact_phone, status, source, created_by_admin_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'onaylandi', 'admin_created', $12)
+       RETURNING id, user_id AS "userId", type,
+                 start_date::text AS "start",
+                 end_date::text AS "end",
+                 days, reason, status,
+                 start_time AS "startTime", end_time AS "endTime",
+                 return_date::text AS "returnDate", location,
+                 contact_phone AS "contactPhone"`,
+      [
+        userId, type, start, end, days, reason || null,
+        startTime || null, endTime || null, returnDate || null,
+        location || null, contactPhone || null, req.user.id,
+      ]
+    );
+
+    res.status(201).json(rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Kayıt oluşturulamadı." });
+  }
+});
 // - Employees may only cancel (set to 'reddedildi') their own pending requests.
 app.patch("/api/requests/:id", requireAuth, async (req, res) => {
   try {

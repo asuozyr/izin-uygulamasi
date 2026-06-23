@@ -164,6 +164,8 @@ const api = {
     apiRequest(`/api/requests${userId ? `?userId=${encodeURIComponent(userId)}` : ""}`, {}, token),
   createRequest: (token, payload) =>
     apiRequest("/api/requests", { method: "POST", body: JSON.stringify(payload) }, token),
+  adminCreateRequest: (token, payload) =>
+    apiRequest("/api/admin/requests", { method: "POST", body: JSON.stringify(payload) }, token),
   updateRequestStatus: (token, id, status) =>
     apiRequest(`/api/requests/${id}`, { method: "PATCH", body: JSON.stringify({ status }) }, token),
   getCalendar: (token, year, month) => apiRequest(`/api/calendar?year=${year}&month=${month}`, {}, token),
@@ -511,6 +513,22 @@ function MainApp({ token, user, onLogout }) {
   const errStyle = (name) =>
     fieldErrors[name] ? { border: `1px solid ${ERR_COLOR}`, borderRadius: "var(--border-radius-md)" } : {};
 
+  // --- Yönetici: çalışan adına izin girişi (ayrı form state'i) ---
+  const [adminForm, setAdminForm] = useState({
+    userId: "", type: "yillik", start: "", end: "", returnDate: "",
+    startTime: "", endTime: "", location: "", countryCode: "+90", contactPhone: "", reason: "",
+  });
+  const [adminErrors, setAdminErrors] = useState({});
+  const [adminSubmitting, setAdminSubmitting] = useState(false);
+  const [adminMsg, setAdminMsg] = useState("");
+  function updateAdminField(name, value) {
+    setAdminForm((f) => ({ ...f, [name]: value }));
+    setAdminErrors((fe) => (fe[name] ? { ...fe, [name]: undefined } : fe));
+    setAdminMsg("");
+  }
+  const adminErrStyle = (name) =>
+    adminErrors[name] ? { border: `1px solid ${ERR_COLOR}`, borderRadius: "var(--border-radius-md)" } : {};
+
   const now = new Date();
   const [calendarYear, setCalendarYear] = useState(now.getFullYear());
   const [calendarMonth, setCalendarMonth] = useState(now.getMonth() + 1);
@@ -622,6 +640,61 @@ function MainApp({ token, user, onLogout }) {
     }
   }
 
+  // Yönetici formu: çalışan, tür, başlangıç, bitiş ve işe dönüş zorunlu; saat/yer/telefon/açıklama opsiyonel.
+  function validateAdminForm() {
+    const errs = {};
+    if (!adminForm.userId) errs.userId = "Bu alan zorunlu.";
+    if (!adminForm.type) errs.type = "Bu alan zorunlu.";
+    if (!adminForm.start) errs.start = "Bu alan zorunlu.";
+    if (!adminForm.end) errs.end = "Bu alan zorunlu.";
+    if (adminForm.start && adminForm.end && new Date(adminForm.end) < new Date(adminForm.start)) {
+      errs.end = "Bitiş tarihi başlangıçtan önce olamaz.";
+    }
+    if (!adminForm.returnDate) errs.returnDate = "Bu alan zorunlu.";
+    if (adminForm.contactPhone && adminForm.contactPhone.trim()) {
+      const pErr = phoneError(adminForm.countryCode, adminForm.contactPhone);
+      if (pErr) errs.contactPhone = pErr;
+    }
+    return errs;
+  }
+
+  async function submitAdminRequest(e) {
+    e.preventDefault();
+    setActionError("");
+    setAdminMsg("");
+    const errs = validateAdminForm();
+    setAdminErrors(errs);
+    if (Object.keys(errs).length > 0) return;
+    setAdminSubmitting(true);
+    try {
+      await api.adminCreateRequest(token, {
+        userId: adminForm.userId,
+        type: adminForm.type,
+        start: adminForm.start,
+        end: adminForm.end,
+        returnDate: adminForm.returnDate,
+        startTime: adminForm.startTime,
+        endTime: adminForm.endTime,
+        location: adminForm.location.trim(),
+        contactPhone: adminForm.contactPhone.trim() ? `${adminForm.countryCode} ${adminForm.contactPhone}`.trim() : "",
+        reason: adminForm.reason,
+      });
+      const empName = employees.find((x) => x.id === adminForm.userId)?.name || "Çalışan";
+      setAdminMsg(`${empName} adına izin kaydı oluşturuldu ve onaylandı.`);
+      setAdminForm({
+        userId: "", type: "yillik", start: "", end: "", returnDate: "",
+        startTime: "", endTime: "", location: "", countryCode: "+90", contactPhone: "", reason: "",
+      });
+      setAdminErrors({});
+      refreshRequests();
+      api.getEmployees(token).then(setEmployees).catch(() => {});
+    } catch (err) {
+      setActionError(err.message);
+    } finally {
+      setAdminSubmitting(false);
+    }
+  }
+
   async function decide(id, decision) {
     setActionError("");
     try {
@@ -691,6 +764,7 @@ function MainApp({ token, user, onLogout }) {
           { id: "genelbakis", label: "Genel bakış", icon: "ti-layout-dashboard" },
           { id: "onaylar", label: "Onay bekleyenler", icon: "ti-clipboard-check" },
           { id: "tumtalepler", label: "Tüm talepler", icon: "ti-list" },
+          { id: "izingir", label: "Çalışan adına izin gir", icon: "ti-user-plus" },
           { id: "calisanlar", label: "Çalışanlar", icon: "ti-users" },
           { id: "takvim", label: "Takım takvimi", icon: "ti-calendar" },
         ];
@@ -702,6 +776,7 @@ function MainApp({ token, user, onLogout }) {
     taleplerim: ["Taleplerim", "Oluşturduğun izin talepleri"],
     onaylar: ["Onay bekleyenler", "İncelenecek talepler"],
     tumtalepler: ["Tüm talepler", "Tüm çalışanların talepleri"],
+    izingir: ["Çalışan adına izin gir", "Yönetici olarak çalışan için izin kaydı oluştur"],
     calisanlar: ["Çalışanlar", "Tüm çalışanların izin hakedişi"],
     takvim: ["Takım takvimi", "Onaylı izinler"],
   };
@@ -1078,6 +1153,103 @@ function MainApp({ token, user, onLogout }) {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* ---- Çalışan adına izin gir (yönetici) ---- */}
+      {view === "izingir" && role === "yonetici" && (
+        <div className="ev-card" style={{ maxWidth: 820 }}>
+          {adminMsg && (
+            <div style={{
+              background: "var(--color-background-success)", color: "var(--color-text-success)",
+              borderRadius: 10, padding: "10px 14px", marginBottom: 16, fontSize: 14,
+              display: "flex", alignItems: "center", gap: 8
+            }}>
+              <i className="ti ti-circle-check" aria-hidden="true"></i> {adminMsg}
+            </div>
+          )}
+          <form onSubmit={submitAdminRequest}>
+            <div style={{ marginBottom: 12 }}>
+              <label style={{ fontSize: 13, color: "var(--color-text-secondary)", display: "block", marginBottom: 4 }}>Çalışan</label>
+              <select value={adminForm.userId} onChange={(e) => updateAdminField("userId", e.target.value)} style={{ width: "100%", ...adminErrStyle("userId") }}>
+                <option value="">Çalışan seçin…</option>
+                {employees.map((e) => (
+                  <option key={e.id} value={e.id}>{e.name}{e.role === "yonetici" ? " (yönetici)" : ""}</option>
+                ))}
+              </select>
+              {adminErrors.userId && <p style={{ color: ERR_COLOR, fontSize: 12, margin: "4px 0 0" }}>{adminErrors.userId}</p>}
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+              <div>
+                <label style={{ fontSize: 13, color: "var(--color-text-secondary)", display: "block", marginBottom: 4 }}>İzin türü</label>
+                <select value={adminForm.type} onChange={(e) => updateAdminField("type", e.target.value)} style={{ width: "100%", ...adminErrStyle("type") }}>
+                  {Object.entries(LEAVE_TYPES).map(([key, val]) => (<option key={key} value={key}>{val.label}</option>))}
+                </select>
+                {adminErrors.type && <p style={{ color: ERR_COLOR, fontSize: 12, margin: "4px 0 0" }}>{adminErrors.type}</p>}
+              </div>
+              <div>
+                <label style={{ fontSize: 13, color: "var(--color-text-secondary)", display: "block", marginBottom: 4 }}>İşe dönüş tarihi</label>
+                <input type="date" value={adminForm.returnDate} onChange={(e) => updateAdminField("returnDate", e.target.value)} style={{ width: "100%", ...adminErrStyle("returnDate") }} />
+                {adminErrors.returnDate && <p style={{ color: ERR_COLOR, fontSize: 12, margin: "4px 0 0" }}>{adminErrors.returnDate}</p>}
+              </div>
+              <div>
+                <label style={{ fontSize: 13, color: "var(--color-text-secondary)", display: "block", marginBottom: 4 }}>İzin başlangıç tarihi</label>
+                <input type="date" value={adminForm.start} onChange={(e) => updateAdminField("start", e.target.value)} style={{ width: "100%", ...adminErrStyle("start") }} />
+                {adminErrors.start && <p style={{ color: ERR_COLOR, fontSize: 12, margin: "4px 0 0" }}>{adminErrors.start}</p>}
+              </div>
+              <div>
+                <label style={{ fontSize: 13, color: "var(--color-text-secondary)", display: "block", marginBottom: 4 }}>İzin bitiş tarihi</label>
+                <input type="date" value={adminForm.end} onChange={(e) => updateAdminField("end", e.target.value)} style={{ width: "100%", ...adminErrStyle("end") }} />
+                {adminErrors.end && <p style={{ color: ERR_COLOR, fontSize: 12, margin: "4px 0 0" }}>{adminErrors.end}</p>}
+              </div>
+              <div>
+                <label style={{ fontSize: 13, color: "var(--color-text-secondary)", display: "block", marginBottom: 4 }}>Başlangıç saati <span style={{ color: "var(--color-text-tertiary)" }}>(opsiyonel)</span></label>
+                <input type="time" value={adminForm.startTime} onChange={(e) => updateAdminField("startTime", e.target.value)} style={{ width: "100%" }} />
+              </div>
+              <div>
+                <label style={{ fontSize: 13, color: "var(--color-text-secondary)", display: "block", marginBottom: 4 }}>Bitiş saati <span style={{ color: "var(--color-text-tertiary)" }}>(opsiyonel)</span></label>
+                <input type="time" value={adminForm.endTime} onChange={(e) => updateAdminField("endTime", e.target.value)} style={{ width: "100%" }} />
+              </div>
+              <div>
+                <label style={{ fontSize: 13, color: "var(--color-text-secondary)", display: "block", marginBottom: 4 }}>İzin geçirilecek yer <span style={{ color: "var(--color-text-tertiary)" }}>(opsiyonel)</span></label>
+                <input type="text" value={adminForm.location} onChange={(e) => updateAdminField("location", e.target.value)} placeholder="Örn. İzmir"
+                  style={{ width: "100%", fontFamily: "inherit", fontSize: 14, padding: "6px 10px", borderRadius: "var(--border-radius-md)", border: "1px solid var(--color-border-secondary)", boxSizing: "border-box" }} />
+              </div>
+              <div>
+                <label style={{ fontSize: 13, color: "var(--color-text-secondary)", display: "block", marginBottom: 4 }}>Ulaşılabilecek telefon <span style={{ color: "var(--color-text-tertiary)" }}>(opsiyonel)</span></label>
+                <div style={{ display: "flex", gap: 6 }}>
+                  <input type="text" list="ulke-kodlari-admin" value={adminForm.countryCode} onChange={(e) => updateAdminField("countryCode", e.target.value)} aria-label="Ülke kodu"
+                    style={{ width: 78, flexShrink: 0, fontFamily: "inherit", fontSize: 14, padding: "6px 8px", borderRadius: "var(--border-radius-md)", border: `1px solid ${adminErrors.contactPhone ? ERR_COLOR : "var(--color-border-secondary)"}`, boxSizing: "border-box" }} />
+                  <input type="tel" value={adminForm.contactPhone} onChange={(e) => updateAdminField("contactPhone", e.target.value)} placeholder="5xx xxx xx xx"
+                    style={{ flex: 1, minWidth: 0, fontFamily: "inherit", fontSize: 14, padding: "6px 10px", borderRadius: "var(--border-radius-md)", border: `1px solid ${adminErrors.contactPhone ? ERR_COLOR : "var(--color-border-secondary)"}`, boxSizing: "border-box" }} />
+                  <datalist id="ulke-kodlari-admin">
+                    <option value="+90">Türkiye</option>
+                    <option value="+1">ABD / Kanada</option>
+                    <option value="+44">Birleşik Krallık</option>
+                    <option value="+49">Almanya</option>
+                    <option value="+31">Hollanda</option>
+                  </datalist>
+                </div>
+                {adminErrors.contactPhone && <p style={{ color: ERR_COLOR, fontSize: 12, margin: "4px 0 0" }}>{adminErrors.contactPhone}</p>}
+              </div>
+            </div>
+
+            <div style={{ marginBottom: 14 }}>
+              <label style={{ fontSize: 13, color: "var(--color-text-secondary)", display: "block", marginBottom: 4 }}>Açıklama <span style={{ color: "var(--color-text-tertiary)" }}>(opsiyonel)</span></label>
+              <textarea value={adminForm.reason} onChange={(e) => updateAdminField("reason", e.target.value)} rows={3}
+                style={{ width: "100%", boxSizing: "border-box", resize: "vertical", fontFamily: "inherit", fontSize: 14, padding: "8px 10px", borderRadius: "var(--border-radius-md)", border: "1px solid var(--color-border-secondary)" }}
+                placeholder="Örn. yıllık izin (yönetici tarafından girildi)" />
+            </div>
+
+            <button type="submit" className="ev-btn-primary" disabled={adminSubmitting}>
+              <i className="ti ti-user-plus" style={{ fontSize: 15 }} aria-hidden="true"></i>
+              {adminSubmitting ? "Kaydediliyor…" : "Kaydı oluştur (onaylı)"}
+            </button>
+            <p style={{ fontSize: 12, color: "var(--color-text-tertiary)", margin: "10px 0 0" }}>
+              Bu kayıt otomatik olarak <strong>onaylı</strong> eklenir ve çalışanın kullanılan izin günlerine dahil edilir.
+            </p>
+          </form>
         </div>
       )}
 
