@@ -73,15 +73,50 @@ function diffDays(start, end) {
 const VALID_TYPES = ["yillik", "mazeret", "hastalik", "ucretsiz"];
 const VALID_STATUSES = ["beklemede", "onaylandi", "reddedildi", "iptal"];
 
-function publicUser(row) {
+// Yıllık izin hakediş hesabı:
+//  - çalışılan her tam ay için 1.25 gün
+//  - tamamlanan her hizmet yılı için ek 1 gün
+// hire_date'e göre, bugünün tarihine kadar otomatik (canlı/günlük) hesaplanır.
+function computeEarnedLeave(hireDate, asOf = new Date()) {
+  if (!hireDate) return 0;
+  const hire = new Date(hireDate);
+  if (isNaN(hire.getTime())) return 0;
+  let months = (asOf.getFullYear() - hire.getFullYear()) * 12 + (asOf.getMonth() - hire.getMonth());
+  if (asOf.getDate() < hire.getDate()) months -= 1;
+  let years = asOf.getFullYear() - hire.getFullYear();
+  const anniv = new Date(asOf.getFullYear(), hire.getMonth(), hire.getDate());
+  if (asOf < anniv) years -= 1;
+  months = Math.max(0, months);
+  years = Math.max(0, years);
+  const earned = months * 1.25 + years * 1;
+  return Math.round(earned * 100) / 100;
+}
+
+// Bir kullanıcının ONAYLANMIŞ yıllık izin gün toplamı (kullanılan izin)
+async function usedAnnualDays(userId) {
+  const { rows } = await pool.query(
+    "SELECT COALESCE(SUM(days),0) AS used FROM leave_requests WHERE user_id = $1 AND type = 'yillik' AND status = 'onaylandi'",
+    [userId]
+  );
+  return Number(rows[0].used) || 0;
+}
+
+function publicUser(row, usedDays = 0) {
+  const totalEarned = computeEarnedLeave(row.hire_date);
+  const used = Number(usedDays) || 0;
+  const remaining = Math.round((totalEarned - used) * 100) / 100;
   return {
     id: row.id,
     name: row.name,
     initials: row.initials,
-    balance: row.balance,
     role: row.role,
     email: row.email,
     avatarUrl: row.avatar_url || null,
+    hireDate: row.hire_date ? new Date(row.hire_date).toISOString().slice(0, 10) : null,
+    totalEarned,
+    usedLeave: used,
+    remainingLeave: remaining,
+    balance: totalEarned, // geriye dönük uyumluluk (eski "Yıllık hak" alanı)
   };
 }
 
@@ -187,12 +222,27 @@ app.post("/api/auth/google", async (req, res) => {
       );
     }
 
-    // 3) Hâlâ yoksa yeni çalışan kaydı oluştur (JIT provisioning)
+    // 3) Hâlâ yoksa, Google'a bağlı olmayan bir seed kaydını ad ile eşle (başlangıç verisini bağla)
+    if (!employee) {
+      ({ rows } = await pool.query(
+        "SELECT id, role FROM employees WHERE google_id IS NULL AND email IS NULL AND lower(name) = lower($1) LIMIT 1",
+        [name]
+      ));
+      employee = rows[0];
+      if (employee) {
+        await pool.query(
+          "UPDATE employees SET google_id = $1, email = $2, avatar_url = $3, initials = $4 WHERE id = $5",
+          [googleId, email, avatar, initials, employee.id]
+        );
+      }
+    }
+
+    // 4) Hâlâ yoksa yeni çalışan kaydı oluştur (JIT). Yeni çalışan bugünden itibaren hak eder.
     if (!employee) {
       const role = wantsAdmin ? "yonetici" : "calisan";
       ({ rows } = await pool.query(
-        `INSERT INTO employees (id, name, initials, balance, role, email, google_id, avatar_url)
-         VALUES ($1, $2, $3, 14, $4, $5, $6, $7)
+        `INSERT INTO employees (id, name, initials, balance, role, email, google_id, avatar_url, hire_date)
+         VALUES ($1, $2, $3, 14, $4, $5, $6, $7, CURRENT_DATE)
          RETURNING id, role`,
         [googleId, name, initials, role, email, googleId, avatar]
       ));
@@ -205,14 +255,15 @@ app.post("/api/auth/google", async (req, res) => {
 
     // Güncel tam kaydı çek
     const { rows: finalRows } = await pool.query(
-      "SELECT id, name, initials, balance, role, email, avatar_url FROM employees WHERE id = $1",
+      "SELECT id, name, initials, balance, role, email, avatar_url, hire_date FROM employees WHERE id = $1",
       [employee.id]
     );
     const full = finalRows[0];
+    const used = await usedAnnualDays(full.id);
 
     // Oturumun açık kalması için 7 günlük JWT
     const token = jwt.sign({ id: full.id, role: full.role }, JWT_SECRET, { expiresIn: "7d" });
-    res.json({ token, user: publicUser(full) });
+    res.json({ token, user: publicUser(full, used) });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Giriş yapılamadı." });
@@ -223,11 +274,12 @@ app.post("/api/auth/google", async (req, res) => {
 app.get("/api/me", requireAuth, async (req, res) => {
   try {
     const { rows } = await pool.query(
-      "SELECT id, name, initials, balance, role, email, avatar_url FROM employees WHERE id = $1",
+      "SELECT id, name, initials, balance, role, email, avatar_url, hire_date FROM employees WHERE id = $1",
       [req.user.id]
     );
     if (rows.length === 0) return res.status(404).json({ error: "Kullanıcı bulunamadı." });
-    res.json(publicUser(rows[0]));
+    const used = await usedAnnualDays(rows[0].id);
+    res.json(publicUser(rows[0], used));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Kullanıcı bilgisi getirilemedi." });
@@ -242,9 +294,14 @@ app.get("/api/me", requireAuth, async (req, res) => {
 app.get("/api/employees", requireAuth, requireAdmin, async (req, res) => {
   try {
     const { rows } = await pool.query(
-      "SELECT id, name, initials, balance, role, email, avatar_url FROM employees ORDER BY name"
+      "SELECT id, name, initials, balance, role, email, avatar_url, hire_date FROM employees ORDER BY name"
     );
-    res.json(rows.map(publicUser));
+    const { rows: usedRows } = await pool.query(
+      "SELECT user_id, COALESCE(SUM(days),0) AS used FROM leave_requests WHERE type = 'yillik' AND status = 'onaylandi' GROUP BY user_id"
+    );
+    const usedMap = {};
+    for (const u of usedRows) usedMap[u.user_id] = Number(u.used) || 0;
+    res.json(rows.map((r) => publicUser(r, usedMap[r.id] || 0)));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Çalışanlar getirilemedi." });
@@ -305,6 +362,9 @@ app.post("/api/requests", requireAuth, async (req, res) => {
     }
 
     const days = diffDays(start, end);
+
+    // Not: Kalan yıllık izin bakiyesi yetersiz olsa bile talep oluşturulur.
+    // Onaylanınca çalışanın kalan bakiyesi eksiye ("-") düşebilir; engellenmez.
 
     const { rows } = await pool.query(
       `INSERT INTO leave_requests

@@ -691,6 +691,7 @@ function MainApp({ token, user, onLogout }) {
           { id: "genelbakis", label: "Genel bakış", icon: "ti-layout-dashboard" },
           { id: "onaylar", label: "Onay bekleyenler", icon: "ti-clipboard-check" },
           { id: "tumtalepler", label: "Tüm talepler", icon: "ti-list" },
+          { id: "calisanlar", label: "Çalışanlar", icon: "ti-users" },
           { id: "takvim", label: "Takım takvimi", icon: "ti-calendar" },
         ];
 
@@ -701,6 +702,7 @@ function MainApp({ token, user, onLogout }) {
     taleplerim: ["Taleplerim", "Oluşturduğun izin talepleri"],
     onaylar: ["Onay bekleyenler", "İncelenecek talepler"],
     tumtalepler: ["Tüm talepler", "Tüm çalışanların talepleri"],
+    calisanlar: ["Çalışanlar", "Tüm çalışanların izin hakedişi"],
     takvim: ["Takım takvimi", "Onaylı izinler"],
   };
   const [pageTitle, pageSub] = VIEW_TITLES[view] || ["İzin yönetimi", ""];
@@ -779,19 +781,32 @@ function MainApp({ token, user, onLogout }) {
         )}
 
         {/* ---- Genel bakış ---- */}
-        {view === "genelbakis" && role === "calisan" && (
+        {view === "genelbakis" && role === "calisan" && (() => {
+          const earned = Number(user.totalEarned ?? user.balance ?? 0);
+          const used = Number(user.usedLeave ?? usedDays ?? 0);
+          const remaining = Number(user.remainingLeave ?? (earned - used));
+          const fmt = (n) => Number(n || 0).toLocaleString("tr-TR", { maximumFractionDigits: 2 });
+          return (
           <div>
             <div className="ev-stats">
-              <div className="ev-stat"><div className="lab">Yıllık hak</div><div className="val">{user.balance}</div></div>
-              <div className="ev-stat"><div className="lab">Kullanılan</div><div className="val">{usedDays}</div></div>
-              <div className="ev-stat"><div className="lab">Kalan</div><div className="val" style={{ color: BRAND.primary }}>{Math.max(0, user.balance - usedDays)}</div></div>
+              <div className="ev-stat"><div className="lab">Hak edilen izin</div><div className="val">{fmt(earned)}</div></div>
+              <div className="ev-stat"><div className="lab">Kullanılan izin</div><div className="val">{fmt(used)}</div></div>
+              <div className="ev-stat"><div className="lab">Kalan izin hakkı</div><div className="val" style={{ color: remaining < 0 ? "var(--color-text-danger)" : BRAND.primary }}>{fmt(remaining)}</div></div>
             </div>
-            <div className="ev-card" style={{ marginBottom: 22 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "var(--color-text-secondary)", marginBottom: 6 }}>
-                <span>Kullanım</span><span>{usedDays} / {user.balance} gün</span>
+            {remaining < 0 && (
+              <div style={{ background: "var(--color-background-danger)", color: "var(--color-text-danger)", border: "1px solid var(--color-border-danger)", borderRadius: 10, padding: "8px 14px", marginBottom: 16, fontSize: 13 }}>
+                Kalan izin hakkınız eksiye düştü ({fmt(remaining)} gün). Talepler yine de oluşturulabilir.
               </div>
-              <div className="ev-progress"><div style={{ width: `${Math.min(100, Math.round((usedDays / Math.max(1, user.balance)) * 100))}%` }}></div></div>
+            )}
+            <div className="ev-card" style={{ marginBottom: 14 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "var(--color-text-secondary)", marginBottom: 6 }}>
+                <span>Kullanım</span><span>{fmt(used)} / {fmt(earned)} gün</span>
+              </div>
+              <div className="ev-progress"><div style={{ width: `${Math.min(100, Math.round((used / Math.max(1, earned)) * 100))}%` }}></div></div>
             </div>
+            <p style={{ fontSize: 12, color: "var(--color-text-tertiary)", margin: "0 0 22px" }}>
+              {user.hireDate ? `İşe giriş: ${formatDate(user.hireDate)} • ` : ""}Her ay 1,25 gün + tamamlanan her yıl 1 gün otomatik hesaplanır.
+            </p>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
               <div style={{ fontSize: 13, fontWeight: 500, color: "var(--color-text-secondary)" }}>Son talepler</div>
               <button className="ev-btn-ghost" onClick={() => setView("yenitalep")}><i className="ti ti-plus" aria-hidden="true"></i>Yeni talep</button>
@@ -804,7 +819,8 @@ function MainApp({ token, user, onLogout }) {
               </div>
             )}
           </div>
-        )}
+          );
+        })()}
 
         {view === "genelbakis" && role === "yonetici" && (
           <div>
@@ -1064,6 +1080,55 @@ function MainApp({ token, user, onLogout }) {
           })}
         </div>
       )}
+
+      {/* ---- Çalışanlar (yönetici) ---- */}
+      {view === "calisanlar" && role === "yonetici" && (() => {
+        const fmt = (n) => Number(n || 0).toLocaleString("tr-TR", { maximumFractionDigits: 2 });
+        const th = { textAlign: "left", fontSize: 12, fontWeight: 500, color: "var(--color-text-secondary)", padding: "10px 14px", borderBottom: "1px solid var(--color-border-tertiary)", whiteSpace: "nowrap" };
+        const td = { fontSize: 14, padding: "11px 14px", borderBottom: "1px solid var(--color-border-tertiary)", whiteSpace: "nowrap" };
+        const numTd = { ...td, textAlign: "right", fontVariantNumeric: "tabular-nums" };
+        return (
+          <div className="ev-card" style={{ padding: 0, overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 560 }}>
+              <thead>
+                <tr>
+                  <th style={th}>Çalışan</th>
+                  <th style={th}>İşe giriş</th>
+                  <th style={{ ...th, textAlign: "right" }}>Hak edilen</th>
+                  <th style={{ ...th, textAlign: "right" }}>Kullanılan</th>
+                  <th style={{ ...th, textAlign: "right" }}>Kalan</th>
+                </tr>
+              </thead>
+              <tbody>
+                {employees.length === 0 ? (
+                  <tr><td style={{ ...td, color: "var(--color-text-tertiary)" }} colSpan={5}>Çalışan bulunamadı.</td></tr>
+                ) : (
+                  employees.map((e) => {
+                    const earned = Number(e.totalEarned ?? e.balance ?? 0);
+                    const used = Number(e.usedLeave ?? 0);
+                    const remaining = Number(e.remainingLeave ?? (earned - used));
+                    return (
+                      <tr key={e.id}>
+                        <td style={td}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                            <Avatar user={e} size={28} />
+                            <span style={{ fontWeight: 500 }}>{e.name}</span>
+                            {e.role === "yonetici" && <span style={{ fontSize: 11, padding: "1px 7px", borderRadius: 999, background: "var(--accent-bg)", color: "var(--accent)" }}>Yönetici</span>}
+                          </div>
+                        </td>
+                        <td style={{ ...td, color: "var(--color-text-secondary)" }}>{e.hireDate ? formatDate(e.hireDate) : "—"}</td>
+                        <td style={numTd}>{fmt(earned)}</td>
+                        <td style={numTd}>{fmt(used)}</td>
+                        <td style={{ ...numTd, fontWeight: 600, color: remaining < 0 ? "var(--color-text-danger)" : "var(--color-text-primary)" }}>{fmt(remaining)}</td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        );
+      })()}
 
       {/* ---- Takvim ---- */}
       {view === "takvim" && (

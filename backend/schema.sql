@@ -3,10 +3,13 @@
 -- the tables and insert the demo data.
 
 CREATE TABLE IF NOT EXISTS employees (
-  id        TEXT PRIMARY KEY,
-  name      TEXT NOT NULL,
-  initials  TEXT NOT NULL,
-  balance   INTEGER NOT NULL DEFAULT 14
+  id                 TEXT PRIMARY KEY,
+  name               TEXT NOT NULL,
+  initials           TEXT NOT NULL,
+  balance            INTEGER NOT NULL DEFAULT 14,
+  hire_date          DATE,
+  total_earned_leave NUMERIC(7,2) NOT NULL DEFAULT 0,
+  leave_balance      NUMERIC(7,2) NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS leave_requests (
@@ -18,7 +21,7 @@ CREATE TABLE IF NOT EXISTS leave_requests (
   days        INTEGER NOT NULL,
   reason      TEXT,
   status      TEXT NOT NULL DEFAULT 'beklemede'
-              CHECK (status IN ('beklemede', 'onaylandi', 'reddedildi')),
+              CHECK (status IN ('beklemede', 'onaylandi', 'reddedildi', 'iptal')),
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
