@@ -73,6 +73,25 @@ function diffDays(start, end) {
 const VALID_TYPES = ["yillik", "mazeret", "hastalik", "ucretsiz"];
 const VALID_STATUSES = ["beklemede", "onaylandi", "reddedildi", "iptal"];
 
+// Pastel çalışan renk paleti — employee_color yoksa id'den deterministik üretilir (tutarlı).
+const EMPLOYEE_COLORS = [
+  "#DCE7FB", "#FBE2E6", "#E3F3DD", "#FBEFD6", "#E9E0FB", "#D7F0EF",
+  "#FBE6F2", "#E8EAD6", "#F8E2D0", "#DDEBF6", "#EADFD2", "#E0E7E9",
+];
+function colorForId(id) {
+  const s = String(id || "");
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+  return EMPLOYEE_COLORS[h % EMPLOYEE_COLORS.length];
+}
+
+const HALF_DAY_TYPES = ["half_day_morning", "half_day_afternoon"];
+// Yarım gün -> 0.5; tam gün -> tarih aralığı (iş günü) sayısı
+function computeDays(durationType, start, end) {
+  if (HALF_DAY_TYPES.includes(durationType)) return 0.5;
+  return diffDays(start, end);
+}
+
 // Yıllık izin hakediş hesabı:
 //  - çalışılan her tam ay için 1.25 gün
 //  - tamamlanan her hizmet yılı için ek 1 gün
@@ -116,6 +135,7 @@ function publicUser(row, usedDays = 0) {
     totalEarned,
     usedLeave: used,
     remainingLeave: remaining,
+    employeeColor: row.employee_color || colorForId(row.id),
     balance: totalEarned, // geriye dönük uyumluluk (eski "Yıllık hak" alanı)
   };
 }
@@ -241,10 +261,10 @@ app.post("/api/auth/google", async (req, res) => {
     if (!employee) {
       const role = wantsAdmin ? "yonetici" : "calisan";
       ({ rows } = await pool.query(
-        `INSERT INTO employees (id, name, initials, balance, role, email, google_id, avatar_url, hire_date)
-         VALUES ($1, $2, $3, 14, $4, $5, $6, $7, CURRENT_DATE)
+        `INSERT INTO employees (id, name, initials, balance, role, email, google_id, avatar_url, hire_date, employee_color)
+         VALUES ($1, $2, $3, 14, $4, $5, $6, $7, CURRENT_DATE, $8)
          RETURNING id, role`,
-        [googleId, name, initials, role, email, googleId, avatar]
+        [googleId, name, initials, role, email, googleId, avatar, colorForId(googleId)]
       ));
       employee = rows[0];
     } else if (wantsAdmin && employee.role !== "yonetici") {
@@ -255,7 +275,7 @@ app.post("/api/auth/google", async (req, res) => {
 
     // Güncel tam kaydı çek
     const { rows: finalRows } = await pool.query(
-      "SELECT id, name, initials, balance, role, email, avatar_url, hire_date FROM employees WHERE id = $1",
+      "SELECT id, name, initials, balance, role, email, avatar_url, hire_date, employee_color FROM employees WHERE id = $1",
       [employee.id]
     );
     const full = finalRows[0];
@@ -274,7 +294,7 @@ app.post("/api/auth/google", async (req, res) => {
 app.get("/api/me", requireAuth, async (req, res) => {
   try {
     const { rows } = await pool.query(
-      "SELECT id, name, initials, balance, role, email, avatar_url, hire_date FROM employees WHERE id = $1",
+      "SELECT id, name, initials, balance, role, email, avatar_url, hire_date, employee_color FROM employees WHERE id = $1",
       [req.user.id]
     );
     if (rows.length === 0) return res.status(404).json({ error: "Kullanıcı bulunamadı." });
@@ -294,7 +314,7 @@ app.get("/api/me", requireAuth, async (req, res) => {
 app.get("/api/employees", requireAuth, requireAdmin, async (req, res) => {
   try {
     const { rows } = await pool.query(
-      "SELECT id, name, initials, balance, role, email, avatar_url, hire_date FROM employees ORDER BY name"
+      "SELECT id, name, initials, balance, role, email, avatar_url, hire_date, employee_color FROM employees ORDER BY name"
     );
     const { rows: usedRows } = await pool.query(
       "SELECT user_id, COALESCE(SUM(days),0) AS used FROM leave_requests WHERE type = 'yillik' AND status = 'onaylandi' GROUP BY user_id"
@@ -319,7 +339,8 @@ app.get("/api/requests", requireAuth, async (req, res) => {
       SELECT id, user_id AS "userId", type,
              start_date::text AS "start",
              end_date::text AS "end",
-             days, reason, status,
+             days::float AS days, reason, status,
+             duration_type AS "durationType",
              start_time AS "startTime", end_time AS "endTime",
              return_date::text AS "returnDate", location,
              contact_phone AS "contactPhone"
@@ -349,38 +370,41 @@ app.get("/api/requests", requireAuth, async (req, res) => {
 // POST /api/requests  body: { type, start, end, reason, startTime, endTime, returnDate, location, contactPhone }
 app.post("/api/requests", requireAuth, async (req, res) => {
   try {
-    const { type, start, end, reason, startTime, endTime, returnDate, location, contactPhone } = req.body;
+    const { type, start, end, reason, startTime, endTime, returnDate, location, contactPhone, durationType } = req.body;
+    const dur = HALF_DAY_TYPES.includes(durationType) ? durationType : "full_day";
+    const isHalf = dur !== "full_day";
 
-    if (!type || !start || !end) {
+    if (!type || !start || (!isHalf && !end)) {
       return res.status(400).json({ error: "Eksik alanlar var." });
     }
     if (!VALID_TYPES.includes(type)) {
       return res.status(400).json({ error: "Geçersiz izin türü." });
     }
-    if (new Date(end) < new Date(start)) {
+    const effEnd = isHalf ? start : end;
+    if (new Date(effEnd) < new Date(start)) {
       return res.status(400).json({ error: "Bitiş tarihi başlangıçtan önce olamaz." });
     }
 
-    const days = diffDays(start, end);
+    const days = computeDays(dur, start, effEnd);
 
     // Not: Kalan yıllık izin bakiyesi yetersiz olsa bile talep oluşturulur.
     // Onaylanınca çalışanın kalan bakiyesi eksiye ("-") düşebilir; engellenmez.
 
     const { rows } = await pool.query(
       `INSERT INTO leave_requests
-         (user_id, type, start_date, end_date, days, reason, start_time, end_time, return_date, location, contact_phone, status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'beklemede')
+         (user_id, type, start_date, end_date, days, reason, start_time, end_time, return_date, location, contact_phone, status, duration_type)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'beklemede', $12)
        RETURNING id, user_id AS "userId", type,
                  start_date::text AS "start",
                  end_date::text AS "end",
-                 days, reason, status,
+                 days::float AS days, reason, status, duration_type AS "durationType",
                  start_time AS "startTime", end_time AS "endTime",
                  return_date::text AS "returnDate", location,
                  contact_phone AS "contactPhone"`,
       [
-        req.user.id, type, start, end, days, reason || null,
+        req.user.id, type, start, effEnd, days, reason || null,
         startTime || null, endTime || null, returnDate || null,
-        location || null, contactPhone || null,
+        location || null, contactPhone || null, dur,
       ]
     );
 
@@ -396,15 +420,18 @@ app.post("/api/requests", requireAuth, async (req, res) => {
 // body: { userId, type, start, end, returnDate, startTime?, endTime?, location?, contactPhone?, reason? }
 app.post("/api/admin/requests", requireAuth, requireAdmin, async (req, res) => {
   try {
-    const { userId, type, start, end, reason, startTime, endTime, returnDate, location, contactPhone } = req.body;
+    const { userId, type, start, end, reason, startTime, endTime, returnDate, location, contactPhone, durationType } = req.body;
+    const dur = HALF_DAY_TYPES.includes(durationType) ? durationType : "full_day";
+    const isHalf = dur !== "full_day";
 
-    if (!userId || !type || !start || !end || !returnDate) {
+    if (!userId || !type || !start || (!isHalf && !end) || !returnDate) {
       return res.status(400).json({ error: "Eksik alanlar var (çalışan, izin türü, başlangıç, bitiş ve işe dönüş tarihi zorunlu)." });
     }
     if (!VALID_TYPES.includes(type)) {
       return res.status(400).json({ error: "Geçersiz izin türü." });
     }
-    if (new Date(end) < new Date(start)) {
+    const effEnd = isHalf ? start : end;
+    if (new Date(effEnd) < new Date(start)) {
       return res.status(400).json({ error: "Bitiş tarihi başlangıçtan önce olamaz." });
     }
 
@@ -413,23 +440,23 @@ app.post("/api/admin/requests", requireAuth, requireAdmin, async (req, res) => {
       return res.status(404).json({ error: "Çalışan bulunamadı." });
     }
 
-    const days = diffDays(start, end);
+    const days = computeDays(dur, start, effEnd);
 
     const { rows } = await pool.query(
       `INSERT INTO leave_requests
-         (user_id, type, start_date, end_date, days, reason, start_time, end_time, return_date, location, contact_phone, status, source, created_by_admin_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'onaylandi', 'admin_created', $12)
+         (user_id, type, start_date, end_date, days, reason, start_time, end_time, return_date, location, contact_phone, status, source, created_by_admin_id, duration_type)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'onaylandi', 'admin_created', $12, $13)
        RETURNING id, user_id AS "userId", type,
                  start_date::text AS "start",
                  end_date::text AS "end",
-                 days, reason, status,
+                 days::float AS days, reason, status, duration_type AS "durationType",
                  start_time AS "startTime", end_time AS "endTime",
                  return_date::text AS "returnDate", location,
                  contact_phone AS "contactPhone"`,
       [
-        userId, type, start, end, days, reason || null,
+        userId, type, start, effEnd, days, reason || null,
         startTime || null, endTime || null, returnDate || null,
-        location || null, contactPhone || null, req.user.id,
+        location || null, contactPhone || null, req.user.id, dur,
       ]
     );
 
@@ -499,7 +526,8 @@ app.get("/api/calendar", requireAuth, async (req, res) => {
 
     const { rows } = await pool.query(
       `SELECT lr.start_date::text AS "start", lr.end_date::text AS "end", lr.type,
-              e.name, e.initials
+              lr.duration_type AS "durationType", lr.start_time AS "startTime", lr.end_time AS "endTime",
+              e.id AS "empId", e.name, e.initials, e.employee_color AS "color"
        FROM leave_requests lr
        JOIN employees e ON e.id = lr.user_id
        WHERE lr.status = 'onaylandi'
@@ -512,10 +540,19 @@ app.get("/api/calendar", requireAuth, async (req, res) => {
     for (const row of rows) {
       const start = new Date(Math.max(new Date(row.start), monthStart));
       const end = new Date(Math.min(new Date(row.end), monthEnd));
+      const entry = {
+        name: row.name,
+        initials: row.initials,
+        type: row.type,
+        durationType: row.durationType || "full_day",
+        startTime: row.startTime || null,
+        endTime: row.endTime || null,
+        color: row.color || colorForId(row.empId),
+      };
       for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
         const day = String(d.getDate());
         if (!result[day]) result[day] = [];
-        result[day].push({ name: row.name, initials: row.initials, type: row.type });
+        result[day].push(entry);
       }
     }
 

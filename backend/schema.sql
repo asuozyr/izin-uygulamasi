@@ -9,7 +9,8 @@ CREATE TABLE IF NOT EXISTS employees (
   balance            INTEGER NOT NULL DEFAULT 14,
   hire_date          DATE,
   total_earned_leave NUMERIC(7,2) NOT NULL DEFAULT 0,
-  leave_balance      NUMERIC(7,2) NOT NULL DEFAULT 0
+  leave_balance      NUMERIC(7,2) NOT NULL DEFAULT 0,
+  employee_color     TEXT
 );
 
 CREATE TABLE IF NOT EXISTS leave_requests (
@@ -18,10 +19,12 @@ CREATE TABLE IF NOT EXISTS leave_requests (
   type        TEXT NOT NULL CHECK (type IN ('yillik', 'mazeret', 'hastalik', 'ucretsiz')),
   start_date  DATE NOT NULL,
   end_date    DATE NOT NULL,
-  days        INTEGER NOT NULL,
+  days        NUMERIC(5,1) NOT NULL,
   reason      TEXT,
   status      TEXT NOT NULL DEFAULT 'beklemede'
               CHECK (status IN ('beklemede', 'onaylandi', 'reddedildi', 'iptal')),
+  duration_type       TEXT NOT NULL DEFAULT 'full_day'
+              CHECK (duration_type IN ('full_day', 'half_day_morning', 'half_day_afternoon')),
   source              TEXT NOT NULL DEFAULT 'self',
   created_by_admin_id TEXT REFERENCES employees(id),
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now()

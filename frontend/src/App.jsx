@@ -36,6 +36,18 @@ const RAMP_COLORS = {
   "c-pink": { bg: "#FBEAF0", fg: "#72243E" },
 };
 
+const DURATION_OPTIONS = [
+  ["full_day", "Tam gün"],
+  ["half_day_morning", "Yarım gün (sabah)"],
+  ["half_day_afternoon", "Yarım gün (öğleden sonra)"],
+];
+const DURATION_LABEL = {
+  full_day: "Tam gün",
+  half_day_morning: "Yarım gün (sabah)",
+  half_day_afternoon: "Yarım gün (öğleden sonra)",
+};
+const isHalfDay = (d) => d === "half_day_morning" || d === "half_day_afternoon";
+
 const MONTH_NAMES = [
   "Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran",
   "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık",
@@ -102,6 +114,7 @@ function Avatar({ user, size = 36 }) {
 // İzin talebindeki ek bilgileri (saat, işe dönüş, yer, telefon) kart içinde gösterir
 function RequestExtra({ r }) {
   const bits = [];
+  if (isHalfDay(r.durationType)) bits.push(r.durationType === "half_day_morning" ? "Yarım gün (sabah)" : "Yarım gün (öğleden sonra)");
   if (r.startTime || r.endTime) bits.push(`Saat: ${r.startTime || "?"}–${r.endTime || "?"}`);
   if (r.returnDate) bits.push(`İşe dönüş: ${formatDate(r.returnDate)}`);
   if (r.location) bits.push(`Yer: ${r.location}`);
@@ -496,9 +509,25 @@ function MainApp({ token, user, onLogout }) {
   const [error, setError] = useState("");
   const [actionError, setActionError] = useState("");
 
+  // Takvim: responsive görünür izin sayısı + gün detay modalı
+  const [calMax, setCalMax] = useState(3);
+  const [dayModal, setDayModal] = useState(null); // { day, entries } | null
+  useEffect(() => {
+    const calc = () => setCalMax(window.innerWidth < 700 ? 1 : window.innerWidth < 1100 ? 2 : 3);
+    calc();
+    window.addEventListener("resize", calc);
+    return () => window.removeEventListener("resize", calc);
+  }, []);
+  useEffect(() => {
+    if (!dayModal) return;
+    const onKey = (e) => { if (e.key === "Escape") setDayModal(null); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [dayModal]);
+
   const [form, setForm] = useState({
-    type: "yillik", start: "", end: "", startTime: "", endTime: "",
-    returnDate: "", location: "", countryCode: "+90", contactPhone: "", reason: "",
+    type: "yillik", durationType: "full_day", start: "", end: "", startTime: "", endTime: "",
+      returnDate: "", location: "", countryCode: "+90", contactPhone: "", reason: "",
   });
   const [fieldErrors, setFieldErrors] = useState({});
   const [formError, setFormError] = useState("");
@@ -515,7 +544,7 @@ function MainApp({ token, user, onLogout }) {
 
   // --- Yönetici: çalışan adına izin girişi (ayrı form state'i) ---
   const [adminForm, setAdminForm] = useState({
-    userId: "", type: "yillik", start: "", end: "", returnDate: "",
+    userId: "", type: "yillik", durationType: "full_day", start: "", end: "", returnDate: "",
     startTime: "", endTime: "", location: "", countryCode: "+90", contactPhone: "", reason: "",
   });
   const [adminErrors, setAdminErrors] = useState({});
@@ -592,9 +621,11 @@ function MainApp({ token, user, onLogout }) {
     if (!form.type) errs.type = "Bu alan zorunlu.";
     if (!form.returnDate) errs.returnDate = "Bu alan zorunlu.";
     if (!form.start) errs.start = "Bu alan zorunlu.";
-    if (!form.end) errs.end = "Bu alan zorunlu.";
-    if (form.start && form.end && new Date(form.end) < new Date(form.start)) {
-      errs.end = "Bitiş tarihi başlangıçtan önce olamaz.";
+    if (form.durationType === "full_day") {
+      if (!form.end) errs.end = "Bu alan zorunlu.";
+      if (form.start && form.end && new Date(form.end) < new Date(form.start)) {
+        errs.end = "Bitiş tarihi başlangıçtan önce olamaz.";
+      }
     }
     if (!form.startTime) errs.startTime = "Bu alan zorunlu.";
     if (!form.endTime) errs.endTime = "Bu alan zorunlu.";
@@ -617,8 +648,9 @@ function MainApp({ token, user, onLogout }) {
     try {
       await api.createRequest(token, {
         type: form.type,
+        durationType: form.durationType,
         start: form.start,
-        end: form.end,
+        end: form.durationType === "full_day" ? form.end : form.start,
         startTime: form.startTime,
         endTime: form.endTime,
         returnDate: form.returnDate,
@@ -627,8 +659,8 @@ function MainApp({ token, user, onLogout }) {
         reason: form.reason,
       });
       setForm({
-        type: "yillik", start: "", end: "", startTime: "", endTime: "",
-        returnDate: "", location: "", countryCode: "+90", contactPhone: "", reason: "",
+        type: "yillik", durationType: "full_day", start: "", end: "", startTime: "", endTime: "",
+      returnDate: "", location: "", countryCode: "+90", contactPhone: "", reason: "",
       });
       setFieldErrors({});
       setView("taleplerim");
@@ -646,9 +678,11 @@ function MainApp({ token, user, onLogout }) {
     if (!adminForm.userId) errs.userId = "Bu alan zorunlu.";
     if (!adminForm.type) errs.type = "Bu alan zorunlu.";
     if (!adminForm.start) errs.start = "Bu alan zorunlu.";
-    if (!adminForm.end) errs.end = "Bu alan zorunlu.";
-    if (adminForm.start && adminForm.end && new Date(adminForm.end) < new Date(adminForm.start)) {
-      errs.end = "Bitiş tarihi başlangıçtan önce olamaz.";
+    if (adminForm.durationType === "full_day") {
+      if (!adminForm.end) errs.end = "Bu alan zorunlu.";
+      if (adminForm.start && adminForm.end && new Date(adminForm.end) < new Date(adminForm.start)) {
+        errs.end = "Bitiş tarihi başlangıçtan önce olamaz.";
+      }
     }
     if (!adminForm.returnDate) errs.returnDate = "Bu alan zorunlu.";
     if (adminForm.contactPhone && adminForm.contactPhone.trim()) {
@@ -670,8 +704,9 @@ function MainApp({ token, user, onLogout }) {
       await api.adminCreateRequest(token, {
         userId: adminForm.userId,
         type: adminForm.type,
+        durationType: adminForm.durationType,
         start: adminForm.start,
-        end: adminForm.end,
+        end: adminForm.durationType === "full_day" ? adminForm.end : adminForm.start,
         returnDate: adminForm.returnDate,
         startTime: adminForm.startTime,
         endTime: adminForm.endTime,
@@ -682,7 +717,7 @@ function MainApp({ token, user, onLogout }) {
       const empName = employees.find((x) => x.id === adminForm.userId)?.name || "Çalışan";
       setAdminMsg(`${empName} adına izin kaydı oluşturuldu ve onaylandı.`);
       setAdminForm({
-        userId: "", type: "yillik", start: "", end: "", returnDate: "",
+        userId: "", type: "yillik", durationType: "full_day", start: "", end: "", returnDate: "",
         startTime: "", endTime: "", location: "", countryCode: "+90", contactPhone: "", reason: "",
       });
       setAdminErrors({});
@@ -933,6 +968,12 @@ function MainApp({ token, user, onLogout }) {
         }}>
           <form onSubmit={submitRequest}>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "12px" }}>
+              <div style={{ gridColumn: "1 / -1" }}>
+                <label style={{ fontSize: 13, color: "var(--color-text-secondary)", display: "block", marginBottom: 4 }}>İzin süresi</label>
+                <select value={form.durationType} onChange={(e) => updateField("durationType", e.target.value)} style={{ width: "100%" }}>
+                  {DURATION_OPTIONS.map(([v, l]) => (<option key={v} value={v}>{l}</option>))}
+                </select>
+              </div>
               <div>
                 <label style={{ fontSize: 13, color: "var(--color-text-secondary)", display: "block", marginBottom: 4 }}>İzin türü</label>
                 <select value={form.type} onChange={(e) => updateField("type", e.target.value)} style={{ width: "100%", ...errStyle("type") }}>
@@ -954,8 +995,14 @@ function MainApp({ token, user, onLogout }) {
               </div>
               <div>
                 <label style={{ fontSize: 13, color: "var(--color-text-secondary)", display: "block", marginBottom: 4 }}>İzin bitiş tarihi</label>
-                <input type="date" value={form.end} onChange={(e) => updateField("end", e.target.value)} style={{ width: "100%", ...errStyle("end") }} />
-                {fieldErrors.end && <p style={{ color: ERR_COLOR, fontSize: 12, margin: "4px 0 0" }}>{fieldErrors.end}</p>}
+                {form.durationType === "full_day" ? (
+                  <>
+                    <input type="date" value={form.end} onChange={(e) => updateField("end", e.target.value)} style={{ width: "100%", ...errStyle("end") }} />
+                    {fieldErrors.end && <p style={{ color: ERR_COLOR, fontSize: 12, margin: "4px 0 0" }}>{fieldErrors.end}</p>}
+                  </>
+                ) : (
+                  <p style={{ fontSize: 13, color: "var(--color-text-tertiary)", margin: "8px 0 0" }}>Yarım gün — tek tarih (0,5 gün)</p>
+                )}
               </div>
               <div>
                 <label style={{ fontSize: 13, color: "var(--color-text-secondary)", display: "block", marginBottom: 4 }}>Başlangıç saati</label>
@@ -1181,6 +1228,12 @@ function MainApp({ token, user, onLogout }) {
             </div>
 
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+              <div style={{ gridColumn: "1 / -1" }}>
+                <label style={{ fontSize: 13, color: "var(--color-text-secondary)", display: "block", marginBottom: 4 }}>İzin süresi</label>
+                <select value={adminForm.durationType} onChange={(e) => updateAdminField("durationType", e.target.value)} style={{ width: "100%" }}>
+                  {DURATION_OPTIONS.map(([v, l]) => (<option key={v} value={v}>{l}</option>))}
+                </select>
+              </div>
               <div>
                 <label style={{ fontSize: 13, color: "var(--color-text-secondary)", display: "block", marginBottom: 4 }}>İzin türü</label>
                 <select value={adminForm.type} onChange={(e) => updateAdminField("type", e.target.value)} style={{ width: "100%", ...adminErrStyle("type") }}>
@@ -1200,8 +1253,14 @@ function MainApp({ token, user, onLogout }) {
               </div>
               <div>
                 <label style={{ fontSize: 13, color: "var(--color-text-secondary)", display: "block", marginBottom: 4 }}>İzin bitiş tarihi</label>
-                <input type="date" value={adminForm.end} onChange={(e) => updateAdminField("end", e.target.value)} style={{ width: "100%", ...adminErrStyle("end") }} />
-                {adminErrors.end && <p style={{ color: ERR_COLOR, fontSize: 12, margin: "4px 0 0" }}>{adminErrors.end}</p>}
+                {adminForm.durationType === "full_day" ? (
+                  <>
+                    <input type="date" value={adminForm.end} onChange={(e) => updateAdminField("end", e.target.value)} style={{ width: "100%", ...adminErrStyle("end") }} />
+                    {adminErrors.end && <p style={{ color: ERR_COLOR, fontSize: 12, margin: "4px 0 0" }}>{adminErrors.end}</p>}
+                  </>
+                ) : (
+                  <p style={{ fontSize: 13, color: "var(--color-text-tertiary)", margin: "8px 0 0" }}>Yarım gün — tek tarih (0,5 gün)</p>
+                )}
               </div>
               <div>
                 <label style={{ fontSize: 13, color: "var(--color-text-secondary)", display: "block", marginBottom: 4 }}>Başlangıç saati <span style={{ color: "var(--color-text-tertiary)" }}>(opsiyonel)</span></label>
@@ -1349,30 +1408,76 @@ function MainApp({ token, user, onLogout }) {
                   display: "flex", flexDirection: "column", gap: 2
                 }}>
                   <span style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>{day}</span>
-                  {events.slice(0, 2).map((ev, idx) => {
-                    const c = RAMP_COLORS[LEAVE_TYPES[ev.type].color];
-                    return (
-                      <span key={idx} style={{
-                        fontSize: 11, padding: "1px 5px", borderRadius: "var(--border-radius-md)",
-                        background: c.bg, color: c.fg, fontWeight: 500,
-                        whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis"
-                      }}>{ev.initials}</span>
-                    );
-                  })}
-                  {events.length > 2 && (
-                    <span style={{ fontSize: 11, color: "var(--color-text-tertiary)" }}>+{events.length - 2} daha</span>
+                  {events.slice(0, calMax).map((ev, idx) => (
+                    <span key={idx} title={`${ev.name} · ${LEAVE_TYPES[ev.type]?.label || ev.type}${isHalfDay(ev.durationType) ? " · yarım gün" : ""}`}
+                      style={{
+                        fontSize: 11, padding: "1px 6px", borderRadius: "var(--border-radius-md)",
+                        background: ev.color || "#E6F1FB", color: "#23202b", fontWeight: 500,
+                        whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                        display: "flex", alignItems: "center", gap: 3
+                      }}>
+                      {ev.initials}{isHalfDay(ev.durationType) && <span style={{ fontSize: 9, fontWeight: 700 }}>½</span>}
+                    </span>
+                  ))}
+                  {events.length > calMax && (
+                    <button onClick={() => setDayModal({ day, entries: events })}
+                      style={{ fontSize: 11, color: "var(--accent)", background: "none", border: "none", padding: "1px 4px", textAlign: "left", cursor: "pointer", fontWeight: 500 }}>
+                      +{events.length - calMax} daha
+                    </button>
                   )}
                 </div>
               );
             })}
           </div>
-          <div style={{ display: "flex", gap: 16, marginTop: 16, flexWrap: "wrap" }}>
-            {Object.entries(LEAVE_TYPES).map(([key, val]) => (
-              <div key={key} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--color-text-secondary)" }}>
-                <span style={{ width: 10, height: 10, borderRadius: 2, background: RAMP_COLORS[val.color].bg, border: `1px solid ${RAMP_COLORS[val.color].fg}` }}></span>
-                {val.label}
+          {(() => {
+            const m = new Map();
+            Object.values(calendarData).forEach((list) => list.forEach((ev) => { if (!m.has(ev.name)) m.set(ev.name, ev.color); }));
+            const emps = Array.from(m, ([name, color]) => ({ name, color }));
+            return (
+              <div style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 10 }}>
+                {emps.length > 0 && (
+                  <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
+                    {emps.map((e) => (
+                      <div key={e.name} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--color-text-secondary)" }}>
+                        <span style={{ width: 12, height: 12, borderRadius: 4, background: e.color, border: "1px solid var(--color-border-secondary)" }}></span>
+                        {e.name}
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div style={{ fontSize: 12, color: "var(--color-text-tertiary)" }}>½ = yarım gün</div>
               </div>
-            ))}
+            );
+          })()}
+        </div>
+      )}
+
+      {dayModal && (
+        <div onClick={() => setDayModal(null)} role="dialog" aria-modal="true" aria-label="Gün izin detayı"
+          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16, zIndex: 1000 }}>
+          <div onClick={(e) => e.stopPropagation()}
+            style={{ background: "var(--color-background-primary)", color: "var(--color-text-primary)", borderRadius: 14, border: "1px solid var(--color-border-tertiary)", maxWidth: 440, width: "100%", maxHeight: "80vh", overflowY: "auto", padding: "18px 20px" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+              <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>{dayModal.day} {MONTH_NAMES[calendarMonth - 1]} {calendarYear} — izinler</h3>
+              <button onClick={() => setDayModal(null)} aria-label="Kapat"
+                style={{ background: "none", border: "none", cursor: "pointer", fontSize: 18, color: "var(--color-text-secondary)", lineHeight: 1 }}>✕</button>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {dayModal.entries.map((ev, i) => (
+                <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", borderRadius: 10, background: "var(--color-background-secondary)" }}>
+                  <span style={{ width: 12, height: 12, borderRadius: "50%", background: ev.color, flexShrink: 0 }}></span>
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div style={{ fontWeight: 500, fontSize: 14 }}>{ev.name}</div>
+                    <div style={{ fontSize: 12.5, color: "var(--color-text-secondary)", display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      <span>{LEAVE_TYPES[ev.type]?.label || ev.type}</span>
+                      {isHalfDay(ev.durationType) && <span>· {ev.durationType === "half_day_morning" ? "Yarım gün (sabah)" : "Yarım gün (öğleden sonra)"}</span>}
+                      {(ev.startTime || ev.endTime) && <span>· {ev.startTime || "?"}–{ev.endTime || "?"}</span>}
+                    </div>
+                  </div>
+                  <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 999, background: "var(--color-background-success)", color: "var(--color-text-success)", whiteSpace: "nowrap" }}>Onaylı</span>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       )}
