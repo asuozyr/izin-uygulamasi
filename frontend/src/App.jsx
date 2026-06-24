@@ -60,6 +60,14 @@ function diffDays(start, end) {
   return d > 0 ? d : 1;
 }
 
+// Yarım gün seçildiğinde son gün 0,5 sayılır: tam günler + 0,5
+function leaveDays(durationType, start, end) {
+  if (!start || !end) return 0;
+  const base = diffDays(start, end);
+  return isHalfDay(durationType) ? Math.max(0.5, base - 0.5) : base;
+}
+const fmtDays = (n) => Number(n).toLocaleString("tr-TR", { maximumFractionDigits: 1 });
+
 function formatDate(isoDate) {
   // Accepts "YYYY-MM-DD" (or a date-time string) and returns "GG.AA.YYYY"
   const datePart = String(isoDate).slice(0, 10);
@@ -623,11 +631,9 @@ function MainApp({ token, user, onLogout }) {
     if (!form.type) errs.type = "Bu alan zorunlu.";
     if (!form.returnDate) errs.returnDate = "Bu alan zorunlu.";
     if (!form.start) errs.start = "Bu alan zorunlu.";
-    if (form.durationType === "full_day") {
-      if (!form.end) errs.end = "Bu alan zorunlu.";
-      if (form.start && form.end && new Date(form.end) < new Date(form.start)) {
-        errs.end = "Bitiş tarihi başlangıçtan önce olamaz.";
-      }
+    if (!form.end) errs.end = "Bu alan zorunlu.";
+    if (form.start && form.end && new Date(form.end) < new Date(form.start)) {
+      errs.end = "Bitiş tarihi başlangıçtan önce olamaz.";
     }
     if (!form.startTime) errs.startTime = "Bu alan zorunlu.";
     if (!form.endTime) errs.endTime = "Bu alan zorunlu.";
@@ -652,7 +658,7 @@ function MainApp({ token, user, onLogout }) {
         type: form.type,
         durationType: form.durationType,
         start: form.start,
-        end: form.durationType === "full_day" ? form.end : form.start,
+        end: form.end,
         startTime: form.startTime,
         endTime: form.endTime,
         returnDate: form.returnDate,
@@ -680,11 +686,9 @@ function MainApp({ token, user, onLogout }) {
     if (!adminForm.userId) errs.userId = "Bu alan zorunlu.";
     if (!adminForm.type) errs.type = "Bu alan zorunlu.";
     if (!adminForm.start) errs.start = "Bu alan zorunlu.";
-    if (adminForm.durationType === "full_day") {
-      if (!adminForm.end) errs.end = "Bu alan zorunlu.";
-      if (adminForm.start && adminForm.end && new Date(adminForm.end) < new Date(adminForm.start)) {
-        errs.end = "Bitiş tarihi başlangıçtan önce olamaz.";
-      }
+    if (!adminForm.end) errs.end = "Bu alan zorunlu.";
+    if (adminForm.start && adminForm.end && new Date(adminForm.end) < new Date(adminForm.start)) {
+      errs.end = "Bitiş tarihi başlangıçtan önce olamaz.";
     }
     if (!adminForm.returnDate) errs.returnDate = "Bu alan zorunlu.";
     if (adminForm.contactPhone && adminForm.contactPhone.trim()) {
@@ -708,7 +712,7 @@ function MainApp({ token, user, onLogout }) {
         type: adminForm.type,
         durationType: adminForm.durationType,
         start: adminForm.start,
-        end: adminForm.durationType === "full_day" ? adminForm.end : adminForm.start,
+        end: adminForm.end,
         returnDate: adminForm.returnDate,
         startTime: adminForm.startTime,
         endTime: adminForm.endTime,
@@ -1000,14 +1004,9 @@ function MainApp({ token, user, onLogout }) {
               </div>
               <div>
                 <label style={{ fontSize: 13, color: "var(--color-text-secondary)", display: "block", marginBottom: 4 }}>İzin bitiş tarihi</label>
-                {form.durationType === "full_day" ? (
-                  <>
-                    <input type="date" value={form.end} onChange={(e) => updateField("end", e.target.value)} style={{ width: "100%", ...errStyle("end") }} />
-                    {fieldErrors.end && <p style={{ color: ERR_COLOR, fontSize: 12, margin: "4px 0 0" }}>{fieldErrors.end}</p>}
-                  </>
-                ) : (
-                  <p style={{ fontSize: 13, color: "var(--color-text-tertiary)", margin: "8px 0 0" }}>Yarım gün — tek tarih (0,5 gün)</p>
-                )}
+                <input type="date" value={form.end} onChange={(e) => updateField("end", e.target.value)} style={{ width: "100%", ...errStyle("end") }} />
+                {fieldErrors.end && <p style={{ color: ERR_COLOR, fontSize: 12, margin: "4px 0 0" }}>{fieldErrors.end}</p>}
+                {isHalfDay(form.durationType) && <p style={{ fontSize: 11.5, color: "var(--color-text-tertiary)", margin: "4px 0 0" }}>Son gün yarım sayılır (0,5)</p>}
               </div>
               <div>
                 <label style={{ fontSize: 13, color: "var(--color-text-secondary)", display: "block", marginBottom: 4 }}>Başlangıç saati</label>
@@ -1069,7 +1068,8 @@ function MainApp({ token, user, onLogout }) {
             </div>
             {form.start && form.end && new Date(form.end) >= new Date(form.start) && (
               <p style={{ fontSize: 13, color: "var(--color-text-secondary)", marginBottom: 12 }}>
-                Toplam: <strong style={{ fontWeight: 500 }}>{diffDays(form.start, form.end)} gün</strong>
+                Toplam: <strong style={{ fontWeight: 500 }}>{fmtDays(leaveDays(form.durationType, form.start, form.end))} gün</strong>
+                {isHalfDay(form.durationType) && <span style={{ color: "var(--color-text-tertiary)" }}> (son gün yarım)</span>}
               </p>
             )}
             {formError && (
@@ -1258,14 +1258,9 @@ function MainApp({ token, user, onLogout }) {
               </div>
               <div>
                 <label style={{ fontSize: 13, color: "var(--color-text-secondary)", display: "block", marginBottom: 4 }}>İzin bitiş tarihi</label>
-                {adminForm.durationType === "full_day" ? (
-                  <>
-                    <input type="date" value={adminForm.end} onChange={(e) => updateAdminField("end", e.target.value)} style={{ width: "100%", ...adminErrStyle("end") }} />
-                    {adminErrors.end && <p style={{ color: ERR_COLOR, fontSize: 12, margin: "4px 0 0" }}>{adminErrors.end}</p>}
-                  </>
-                ) : (
-                  <p style={{ fontSize: 13, color: "var(--color-text-tertiary)", margin: "8px 0 0" }}>Yarım gün — tek tarih (0,5 gün)</p>
-                )}
+                <input type="date" value={adminForm.end} onChange={(e) => updateAdminField("end", e.target.value)} style={{ width: "100%", ...adminErrStyle("end") }} />
+                {adminErrors.end && <p style={{ color: ERR_COLOR, fontSize: 12, margin: "4px 0 0" }}>{adminErrors.end}</p>}
+                {isHalfDay(adminForm.durationType) && <p style={{ fontSize: 11.5, color: "var(--color-text-tertiary)", margin: "4px 0 0" }}>Son gün yarım sayılır (0,5)</p>}
               </div>
               <div>
                 <label style={{ fontSize: 13, color: "var(--color-text-secondary)", display: "block", marginBottom: 4 }}>Başlangıç saati <span style={{ color: "var(--color-text-tertiary)" }}>(opsiyonel)</span></label>
@@ -1305,6 +1300,13 @@ function MainApp({ token, user, onLogout }) {
                 style={{ width: "100%", boxSizing: "border-box", resize: "vertical", fontFamily: "inherit", fontSize: 14, padding: "8px 10px", borderRadius: "var(--border-radius-md)", border: "1px solid var(--color-border-secondary)" }}
                 placeholder="Örn. yıllık izin (yönetici tarafından girildi)" />
             </div>
+
+            {adminForm.start && adminForm.end && new Date(adminForm.end) >= new Date(adminForm.start) && (
+              <p style={{ fontSize: 13, color: "var(--color-text-secondary)", marginBottom: 14 }}>
+                Toplam: <strong style={{ fontWeight: 500 }}>{fmtDays(leaveDays(adminForm.durationType, adminForm.start, adminForm.end))} gün</strong>
+                {isHalfDay(adminForm.durationType) && <span style={{ color: "var(--color-text-tertiary)" }}> (son gün yarım)</span>}
+              </p>
+            )}
 
             <button type="submit" className="ev-btn-primary" disabled={adminSubmitting}>
               <i className="ti ti-user-plus" style={{ fontSize: 15 }} aria-hidden="true"></i>

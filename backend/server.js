@@ -86,10 +86,11 @@ function colorForId(id) {
 }
 
 const HALF_DAY_TYPES = ["half_day_morning", "half_day_afternoon"];
-// Yarım gün -> 0.5; tam gün -> tarih aralığı (iş günü) sayısı
+// Yarım gün -> son gün 0,5 sayılır: (tarih aralığı günleri) - 0,5. Tek gün -> 0,5.
 function computeDays(durationType, start, end) {
-  if (HALF_DAY_TYPES.includes(durationType)) return 0.5;
-  return diffDays(start, end);
+  const base = diffDays(start, end);
+  if (HALF_DAY_TYPES.includes(durationType)) return Math.max(0.5, base - 0.5);
+  return base;
 }
 
 // Yıllık izin hakediş hesabı:
@@ -372,20 +373,18 @@ app.post("/api/requests", requireAuth, async (req, res) => {
   try {
     const { type, start, end, reason, startTime, endTime, returnDate, location, contactPhone, durationType } = req.body;
     const dur = HALF_DAY_TYPES.includes(durationType) ? durationType : "full_day";
-    const isHalf = dur !== "full_day";
 
-    if (!type || !start || (!isHalf && !end)) {
+    if (!type || !start || !end) {
       return res.status(400).json({ error: "Eksik alanlar var." });
     }
     if (!VALID_TYPES.includes(type)) {
       return res.status(400).json({ error: "Geçersiz izin türü." });
     }
-    const effEnd = isHalf ? start : end;
-    if (new Date(effEnd) < new Date(start)) {
+    if (new Date(end) < new Date(start)) {
       return res.status(400).json({ error: "Bitiş tarihi başlangıçtan önce olamaz." });
     }
 
-    const days = computeDays(dur, start, effEnd);
+    const days = computeDays(dur, start, end);
 
     // Not: Kalan yıllık izin bakiyesi yetersiz olsa bile talep oluşturulur.
     // Onaylanınca çalışanın kalan bakiyesi eksiye ("-") düşebilir; engellenmez.
@@ -402,7 +401,7 @@ app.post("/api/requests", requireAuth, async (req, res) => {
                  return_date::text AS "returnDate", location,
                  contact_phone AS "contactPhone"`,
       [
-        req.user.id, type, start, effEnd, days, reason || null,
+        req.user.id, type, start, end, days, reason || null,
         startTime || null, endTime || null, returnDate || null,
         location || null, contactPhone || null, dur,
       ]
@@ -422,16 +421,14 @@ app.post("/api/admin/requests", requireAuth, requireAdmin, async (req, res) => {
   try {
     const { userId, type, start, end, reason, startTime, endTime, returnDate, location, contactPhone, durationType } = req.body;
     const dur = HALF_DAY_TYPES.includes(durationType) ? durationType : "full_day";
-    const isHalf = dur !== "full_day";
 
-    if (!userId || !type || !start || (!isHalf && !end) || !returnDate) {
+    if (!userId || !type || !start || !end || !returnDate) {
       return res.status(400).json({ error: "Eksik alanlar var (çalışan, izin türü, başlangıç, bitiş ve işe dönüş tarihi zorunlu)." });
     }
     if (!VALID_TYPES.includes(type)) {
       return res.status(400).json({ error: "Geçersiz izin türü." });
     }
-    const effEnd = isHalf ? start : end;
-    if (new Date(effEnd) < new Date(start)) {
+    if (new Date(end) < new Date(start)) {
       return res.status(400).json({ error: "Bitiş tarihi başlangıçtan önce olamaz." });
     }
 
@@ -440,7 +437,7 @@ app.post("/api/admin/requests", requireAuth, requireAdmin, async (req, res) => {
       return res.status(404).json({ error: "Çalışan bulunamadı." });
     }
 
-    const days = computeDays(dur, start, effEnd);
+    const days = computeDays(dur, start, end);
 
     const { rows } = await pool.query(
       `INSERT INTO leave_requests
@@ -454,7 +451,7 @@ app.post("/api/admin/requests", requireAuth, requireAdmin, async (req, res) => {
                  return_date::text AS "returnDate", location,
                  contact_phone AS "contactPhone"`,
       [
-        userId, type, start, effEnd, days, reason || null,
+        userId, type, start, end, days, reason || null,
         startTime || null, endTime || null, returnDate || null,
         location || null, contactPhone || null, req.user.id, dur,
       ]
