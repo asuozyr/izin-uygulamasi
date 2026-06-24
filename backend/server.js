@@ -463,6 +463,68 @@ app.post("/api/admin/requests", requireAuth, requireAdmin, async (req, res) => {
     res.status(500).json({ error: "Kayıt oluşturulamadı." });
   }
 });
+
+// PUT /api/leave-requests/:id  — talebi düzenle
+// - Çalışan yalnız kendi "beklemede" talebini; yönetici tüm talepleri düzenleyebilir.
+app.put("/api/leave-requests/:id", requireAuth, async (req, res) => {
+  try {
+    const id = req.params.id;
+    const { rows: existing } = await pool.query(
+      "SELECT user_id, status FROM leave_requests WHERE id = $1",
+      [id]
+    );
+    if (existing.length === 0) return res.status(404).json({ error: "Talep bulunamadı." });
+
+    const isAdmin = req.user.role === "yonetici";
+    if (!isAdmin) {
+      if (existing[0].user_id !== req.user.id) {
+        return res.status(403).json({ error: "Bu talebi düzenleme yetkiniz yok." });
+      }
+      if (existing[0].status !== "beklemede") {
+        return res.status(403).json({ error: "Yalnızca beklemede olan talepler düzenlenebilir." });
+      }
+    }
+
+    const { type, start, end, reason, startTime, endTime, returnDate, location, contactPhone, durationType } = req.body;
+    const dur = HALF_DAY_TYPES.includes(durationType) ? durationType : "full_day";
+
+    if (!type || !start || !end) {
+      return res.status(400).json({ error: "Eksik alanlar var." });
+    }
+    if (!VALID_TYPES.includes(type)) {
+      return res.status(400).json({ error: "Geçersiz izin türü." });
+    }
+    if (new Date(end) < new Date(start)) {
+      return res.status(400).json({ error: "Bitiş tarihi başlangıçtan önce olamaz." });
+    }
+
+    const days = computeDays(dur, start, end);
+
+    const { rows } = await pool.query(
+      `UPDATE leave_requests SET
+         type = $1, start_date = $2, end_date = $3, days = $4, reason = $5,
+         start_time = $6, end_time = $7, return_date = $8, location = $9, contact_phone = $10,
+         duration_type = $11, updated_at = now()
+       WHERE id = $12
+       RETURNING id, user_id AS "userId", type,
+                 start_date::text AS "start", end_date::text AS "end",
+                 days::float AS days, reason, status, duration_type AS "durationType",
+                 start_time AS "startTime", end_time AS "endTime",
+                 return_date::text AS "returnDate", location, contact_phone AS "contactPhone"`,
+      [
+        type, start, end, days, reason || null,
+        startTime || null, endTime || null, returnDate || null,
+        location || null, contactPhone || null, dur, id,
+      ]
+    );
+
+    res.json(rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Talep güncellenemedi." });
+  }
+});
+
 // - Employees may only cancel (set to 'reddedildi') their own pending requests.
 app.patch("/api/requests/:id", requireAuth, async (req, res) => {
   try {

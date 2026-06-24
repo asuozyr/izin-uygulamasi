@@ -27,7 +27,8 @@ CREATE TABLE IF NOT EXISTS leave_requests (
               CHECK (duration_type IN ('full_day', 'half_day_morning', 'half_day_afternoon')),
   source              TEXT NOT NULL DEFAULT 'self',
   created_by_admin_id TEXT REFERENCES employees(id),
-  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at  TIMESTAMPTZ
 );
 
 CREATE INDEX IF NOT EXISTS idx_leave_requests_user_id ON leave_requests(user_id);

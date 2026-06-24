@@ -187,6 +187,8 @@ const api = {
     apiRequest("/api/requests", { method: "POST", body: JSON.stringify(payload) }, token),
   adminCreateRequest: (token, payload) =>
     apiRequest("/api/admin/requests", { method: "POST", body: JSON.stringify(payload) }, token),
+  updateRequest: (token, id, payload) =>
+    apiRequest(`/api/leave-requests/${id}`, { method: "PUT", body: JSON.stringify(payload) }, token),
   updateRequestStatus: (token, id, status) =>
     apiRequest(`/api/requests/${id}`, { method: "PATCH", body: JSON.stringify({ status }) }, token),
   getCalendar: (token, year, month) => apiRequest(`/api/calendar?year=${year}&month=${month}`, {}, token),
@@ -541,6 +543,8 @@ function MainApp({ token, user, onLogout }) {
   });
   const [fieldErrors, setFieldErrors] = useState({});
   const [formError, setFormError] = useState("");
+  const [formMsg, setFormMsg] = useState("");
+  const [editingId, setEditingId] = useState(null);
   const [submitting, setSubmitting] = useState(false);
 
   // Form alanı değişince ilgili hatayı temizle
@@ -646,6 +650,7 @@ function MainApp({ token, user, onLogout }) {
   async function submitRequest(e) {
     e.preventDefault();
     setFormError("");
+    setFormMsg("");
     const errs = validateForm();
     setFieldErrors(errs);
     if (Object.keys(errs).length > 0) {
@@ -653,31 +658,82 @@ function MainApp({ token, user, onLogout }) {
       return;
     }
     setSubmitting(true);
+    const payload = {
+      type: form.type,
+      durationType: form.durationType,
+      start: form.start,
+      end: form.end,
+      startTime: form.startTime,
+      endTime: form.endTime,
+      returnDate: form.returnDate,
+      location: form.location.trim(),
+      contactPhone: `${form.countryCode} ${form.contactPhone}`.trim(),
+      reason: form.reason,
+    };
     try {
-      await api.createRequest(token, {
-        type: form.type,
-        durationType: form.durationType,
-        start: form.start,
-        end: form.end,
-        startTime: form.startTime,
-        endTime: form.endTime,
-        returnDate: form.returnDate,
-        location: form.location.trim(),
-        contactPhone: `${form.countryCode} ${form.contactPhone}`.trim(),
-        reason: form.reason,
-      });
+      if (editingId) {
+        await api.updateRequest(token, editingId, payload);
+        setEditingId(null);
+        setFormMsg("Talep başarıyla güncellendi.");
+        await refreshRequests();
+        if (realRole === "yonetici") {
+          try { setEmployees(await api.getEmployees(token)); } catch { /* yoksay */ }
+        }
+        setView(realRole === "yonetici" ? "tumtalepler" : "taleplerim");
+      } else {
+        await api.createRequest(token, payload);
+        setView("taleplerim");
+        await refreshRequests();
+      }
       setForm({
         type: "yillik", durationType: "full_day", start: "", end: "", startTime: "", endTime: "",
-      returnDate: "", location: "", countryCode: "+90", contactPhone: "", reason: "",
+        returnDate: "", location: "", countryCode: "+90", contactPhone: "", reason: "",
       });
       setFieldErrors({});
-      setView("taleplerim");
-      refreshRequests();
     } catch (err) {
       setFormError(err.message);
     } finally {
       setSubmitting(false);
     }
+  }
+
+  function startEdit(r) {
+    let cc = "+90";
+    let num = "";
+    if (r.contactPhone) {
+      const m = String(r.contactPhone).trim().match(/^(\+\d+)\s+(.*)$/);
+      if (m) { cc = m[1]; num = m[2]; } else { num = r.contactPhone; }
+    }
+    setForm({
+      type: r.type || "yillik",
+      durationType: r.durationType || "full_day",
+      start: r.start || "",
+      end: r.end || "",
+      startTime: r.startTime || "",
+      endTime: r.endTime || "",
+      returnDate: r.returnDate || "",
+      location: r.location || "",
+      countryCode: cc,
+      contactPhone: num,
+      reason: r.reason || "",
+    });
+    setFieldErrors({});
+    setFormError("");
+    setFormMsg("");
+    setEditingId(r.id);
+    setView("yenitalep");
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+    setForm({
+      type: "yillik", durationType: "full_day", start: "", end: "", startTime: "", endTime: "",
+      returnDate: "", location: "", countryCode: "+90", contactPhone: "", reason: "",
+    });
+    setFieldErrors({});
+    setFormError("");
+    setFormMsg("");
+    setView(realRole === "yonetici" ? "tumtalepler" : "taleplerim");
   }
 
   // Yönetici formu: çalışan, tür, başlangıç, bitiş ve işe dönüş zorunlu; saat/yer/telefon/açıklama opsiyonel.
@@ -821,7 +877,10 @@ function MainApp({ token, user, onLogout }) {
     calisanlar: ["Çalışanlar", "Tüm çalışanların izin hakedişi"],
     takvim: ["Takım takvimi", "Onaylı izinler"],
   };
-  const [pageTitle, pageSub] = VIEW_TITLES[view] || ["İzin yönetimi", ""];
+  const [pageTitle, pageSub] =
+    editingId && view === "yenitalep"
+      ? ["Talebi düzenle", "Mevcut talebi güncelle"]
+      : VIEW_TITLES[view] || ["İzin yönetimi", ""];
 
   return (
     <div className="ev-shell">
@@ -881,6 +940,21 @@ function MainApp({ token, user, onLogout }) {
           }}>
             <i className="ti ti-eye" aria-hidden="true"></i>
             Önizleme: çalışan görünümü — verileriniz değişmez.
+          </div>
+        )}
+
+        {formMsg && (
+          <div role="status" style={{
+            background: "var(--color-background-success)", color: "var(--color-text-success)",
+            border: "1px solid var(--color-border-success, transparent)",
+            borderRadius: 10, padding: "8px 14px", marginBottom: "1rem", fontSize: 13,
+            display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8
+          }}>
+            <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <i className="ti ti-circle-check" aria-hidden="true"></i>{formMsg}
+            </span>
+            <button onClick={() => setFormMsg("")} aria-label="Kapat"
+              style={{ background: "none", border: "none", cursor: "pointer", color: "inherit", fontSize: 16, lineHeight: 1 }}>✕</button>
           </div>
         )}
 
@@ -1075,17 +1149,25 @@ function MainApp({ token, user, onLogout }) {
             {formError && (
               <p style={{ fontSize: 13, color: "var(--color-text-danger)", marginBottom: 12 }}>{formError}</p>
             )}
-            <button
-              type="submit"
-              disabled={submitting}
-              style={{
-                display: "flex", alignItems: "center", gap: 6,
-                background: BRAND.primary, borderColor: BRAND.primary, color: "#fff",
-              }}
-            >
-              <i className="ti ti-send" style={{ fontSize: 16 }} aria-hidden="true"></i>
-              {submitting ? "Gönderiliyor..." : "Talebi gönder"}
-            </button>
+            <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+              <button
+                type="submit"
+                disabled={submitting}
+                style={{
+                  display: "flex", alignItems: "center", gap: 6,
+                  background: BRAND.primary, borderColor: BRAND.primary, color: "#fff",
+                }}
+              >
+                <i className={`ti ${editingId ? "ti-check" : "ti-send"}`} style={{ fontSize: 16 }} aria-hidden="true"></i>
+                {submitting ? "Kaydediliyor..." : editingId ? "Değişiklikleri kaydet" : "Talebi gönder"}
+              </button>
+              {editingId && (
+                <button type="button" onClick={cancelEdit} disabled={submitting}
+                  style={{ background: "var(--color-background-primary)", color: "var(--color-text-secondary)", border: "1px solid var(--color-border-secondary)" }}>
+                  İptal
+                </button>
+              )}
+            </div>
           </form>
         </div>
       )}
@@ -1113,7 +1195,10 @@ function MainApp({ token, user, onLogout }) {
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <ColorBadge text={STATUS[r.status].label} ramp={STATUS[r.status].color} />
                 {r.status === "beklemede" && (
-                  <button onClick={() => cancelRequest(r.id)} style={{ fontSize: 13, padding: "4px 10px" }}>İptal et</button>
+                  <>
+                    <button onClick={() => startEdit(r)} style={{ fontSize: 13, padding: "4px 10px" }}>Düzenle</button>
+                    <button onClick={() => cancelRequest(r.id)} style={{ fontSize: 13, padding: "4px 10px" }}>İptal et</button>
+                  </>
                 )}
               </div>
               <RequestExtra r={r} />
@@ -1166,6 +1251,11 @@ function MainApp({ token, user, onLogout }) {
                   <button onClick={() => decide(r.id, "reddedildi")} style={{ fontSize: 13, padding: "4px 12px", display: "flex", alignItems: "center", gap: 4 }}>
                     <i className="ti ti-x" style={{ fontSize: 14 }} aria-hidden="true"></i> Reddet
                   </button>
+                  {realRole === "yonetici" && !previewEmployee && (
+                    <button onClick={() => startEdit(r)} style={{ fontSize: 13, padding: "4px 12px", display: "flex", alignItems: "center", gap: 4 }}>
+                      <i className="ti ti-pencil" style={{ fontSize: 14 }} aria-hidden="true"></i> Düzenle
+                    </button>
+                  )}
                 </div>
                 <RequestExtra r={r} />
               </div>
@@ -1194,6 +1284,12 @@ function MainApp({ token, user, onLogout }) {
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                   <ColorBadge text={STATUS[r.status].label} ramp={STATUS[r.status].color} />
+                  {realRole === "yonetici" && !previewEmployee && (
+                    <button onClick={() => startEdit(r)} title="Talebi düzenle"
+                      style={{ fontSize: 13, padding: "4px 12px", display: "flex", alignItems: "center", gap: 4 }}>
+                      <i className="ti ti-pencil" style={{ fontSize: 14 }} aria-hidden="true"></i> Düzenle
+                    </button>
+                  )}
                   {realRole === "yonetici" && !previewEmployee && (r.status === "beklemede" || r.status === "onaylandi") && (
                     <button onClick={() => cancelByAdmin(r.id)} title="Talebi iptal et"
                       style={{ fontSize: 13, padding: "4px 12px", display: "flex", alignItems: "center", gap: 4, color: "var(--color-text-danger)", borderColor: "var(--color-border-danger)" }}>
