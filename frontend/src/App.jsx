@@ -42,6 +42,11 @@ const DURATION_OPTIONS = [
   ["half_day", "Yarım gün"],
   ["custom", "Kendim gireceğim (saatli)"],
 ];
+// Form gün tipi seçimi: yalnızca iki seçenek (radio)
+const DAY_TYPE_RADIOS = [
+  ["full_day", "Tüm gün"],
+  ["custom", "Kendim gireceğim"],
+];
 const DURATION_LABEL = {
   full_day: "Tam gün",
   half_day: "Yarım gün",
@@ -1124,10 +1129,15 @@ function MainApp({ token, user, onLogout }) {
                 {fieldErrors.end && <p style={{ color: ERR_COLOR, fontSize: 12, margin: "4px 0 0" }}>{fieldErrors.end}</p>}
               </div>
               <div style={{ gridColumn: "1 / -1" }}>
-                <label style={{ fontSize: 13, color: "var(--color-text-secondary)", display: "block", marginBottom: 4 }}>Gün tipi</label>
-                <select value={form.durationType} onChange={(e) => updateField("durationType", e.target.value)} style={{ width: "100%" }}>
-                  {DURATION_OPTIONS.map(([v, l]) => (<option key={v} value={v}>{l}</option>))}
-                </select>
+                <label style={{ fontSize: 13, color: "var(--color-text-secondary)", display: "block", marginBottom: 6 }}>Gün tipi</label>
+                <div style={{ display: "flex", gap: 18, flexWrap: "wrap" }}>
+                  {DAY_TYPE_RADIOS.map(([v, l]) => (
+                    <label key={v} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 14, cursor: "pointer" }}>
+                      <input type="radio" name="dayType" value={v} checked={form.durationType === v} onChange={() => updateField("durationType", v)} />
+                      {l}
+                    </label>
+                  ))}
+                </div>
                 <p style={{ fontSize: 11.5, color: "var(--color-text-tertiary)", margin: "4px 0 0" }}>
                   {form.durationType === "full_day"
                     ? "Her gün tam gün sayılır."
@@ -1438,10 +1448,15 @@ function MainApp({ token, user, onLogout }) {
                 {adminErrors.end && <p style={{ color: ERR_COLOR, fontSize: 12, margin: "4px 0 0" }}>{adminErrors.end}</p>}
               </div>
               <div style={{ gridColumn: "1 / -1" }}>
-                <label style={{ fontSize: 13, color: "var(--color-text-secondary)", display: "block", marginBottom: 4 }}>Gün tipi</label>
-                <select value={adminForm.durationType} onChange={(e) => updateAdminField("durationType", e.target.value)} style={{ width: "100%" }}>
-                  {DURATION_OPTIONS.map(([v, l]) => (<option key={v} value={v}>{l}</option>))}
-                </select>
+                <label style={{ fontSize: 13, color: "var(--color-text-secondary)", display: "block", marginBottom: 6 }}>Gün tipi</label>
+                <div style={{ display: "flex", gap: 18, flexWrap: "wrap" }}>
+                  {DAY_TYPE_RADIOS.map(([v, l]) => (
+                    <label key={v} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 14, cursor: "pointer" }}>
+                      <input type="radio" name="adminDayType" value={v} checked={adminForm.durationType === v} onChange={() => updateAdminField("durationType", v)} />
+                      {l}
+                    </label>
+                  ))}
+                </div>
               </div>
               {adminForm.durationType === "custom" && (
                 <>
