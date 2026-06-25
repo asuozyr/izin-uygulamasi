@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import logo from "./assets/logo.png";
 import logoDark from "./assets/logo-dark.png";
+import PrintLeaveForm from "./PrintLeaveForm.jsx";
 
 const API_BASE = "";
 
@@ -1194,6 +1195,7 @@ function MainApp({ token, user, onLogout }) {
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <ColorBadge text={STATUS[r.status].label} ramp={STATUS[r.status].color} />
+                <button onClick={() => window.open(`/leave-requests/${r.id}/print`, "_blank")} style={{ fontSize: 13, padding: "4px 10px" }}>Formu Yazdır</button>
                 {r.status === "beklemede" && (
                   <>
                     <button onClick={() => startEdit(r)} style={{ fontSize: 13, padding: "4px 10px" }}>Düzenle</button>
@@ -1256,6 +1258,9 @@ function MainApp({ token, user, onLogout }) {
                       <i className="ti ti-pencil" style={{ fontSize: 14 }} aria-hidden="true"></i> Düzenle
                     </button>
                   )}
+                  <button onClick={() => window.open(`/leave-requests/${r.id}/print`, "_blank")} style={{ fontSize: 13, padding: "4px 12px", display: "flex", alignItems: "center", gap: 4 }}>
+                    <i className="ti ti-printer" style={{ fontSize: 14 }} aria-hidden="true"></i> Formu Yazdır
+                  </button>
                 </div>
                 <RequestExtra r={r} />
               </div>
@@ -1290,6 +1295,10 @@ function MainApp({ token, user, onLogout }) {
                       <i className="ti ti-pencil" style={{ fontSize: 14 }} aria-hidden="true"></i> Düzenle
                     </button>
                   )}
+                  <button onClick={() => window.open(`/leave-requests/${r.id}/print`, "_blank")} title="Formu yazdır"
+                    style={{ fontSize: 13, padding: "4px 12px", display: "flex", alignItems: "center", gap: 4 }}>
+                    <i className="ti ti-printer" style={{ fontSize: 14 }} aria-hidden="true"></i> Formu Yazdır
+                  </button>
                   {realRole === "yonetici" && !previewEmployee && (r.status === "beklemede" || r.status === "onaylandi") && (
                     <button onClick={() => cancelByAdmin(r.id)} title="Talebi iptal et"
                       style={{ fontSize: 13, padding: "4px 12px", display: "flex", alignItems: "center", gap: 4, color: "var(--color-text-danger)", borderColor: "var(--color-border-danger)" }}>
@@ -1595,6 +1604,13 @@ function MainApp({ token, user, onLogout }) {
 const TOKEN_KEY = "izin_token";
 
 export default function LeaveApp() {
+  // Yazdırma sayfası: /leave-requests/:id/print (router yok; path'ten algılanır)
+  const printMatch =
+    typeof window !== "undefined" && window.location.pathname.match(/^\/leave-requests\/([^/]+)\/print\/?$/);
+  if (printMatch) {
+    return <PrintLeaveForm id={decodeURIComponent(printMatch[1])} />;
+  }
+
   const [token, setToken] = useState(null);
   const [user, setUser] = useState(null);
   const [checkingSession, setCheckingSession] = useState(true);

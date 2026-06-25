@@ -525,6 +525,35 @@ app.put("/api/leave-requests/:id", requireAuth, async (req, res) => {
   }
 });
 
+// GET /api/leave-requests/:id — tek talep (yazdırma formu için). Çalışan yalnız kendi; yönetici tümü.
+app.get("/api/leave-requests/:id", requireAuth, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT lr.id, lr.user_id AS "userId", lr.type,
+              lr.start_date::text AS "start", lr.end_date::text AS "end",
+              lr.days::float AS days, lr.reason, lr.status, lr.duration_type AS "durationType",
+              lr.start_time AS "startTime", lr.end_time AS "endTime",
+              lr.return_date::text AS "returnDate", lr.location,
+              lr.contact_phone AS "contactPhone",
+              lr.created_at AS "createdAt",
+              e.name AS "employeeName", e.initials AS "employeeInitials"
+       FROM leave_requests lr
+       JOIN employees e ON e.id = lr.user_id
+       WHERE lr.id = $1`,
+      [req.params.id]
+    );
+    if (rows.length === 0) return res.status(404).json({ error: "Talep bulunamadı." });
+    const row = rows[0];
+    if (req.user.role !== "yonetici" && row.userId !== req.user.id) {
+      return res.status(403).json({ error: "Bu talebi görüntüleme yetkiniz yok." });
+    }
+    res.json(row);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Talep getirilemedi." });
+  }
+});
+
 // - Employees may only cancel (set to 'reddedildi') their own pending requests.
 app.patch("/api/requests/:id", requireAuth, async (req, res) => {
   try {
