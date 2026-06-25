@@ -61,25 +61,36 @@ function diffDays(start, end) {
   return d > 0 ? d : 1;
 }
 
-// Gün tipine göre toplam: full_day -> aralık; half_day -> 0,5*aralık; custom -> (saat/9)*aralık
+// Gün tipine göre toplam: full_day -> aralık; half_day -> 0,5*aralık;
+// custom -> tek gün: (bitiş-başlangıç)/9; çok gün: sınır günler saatlere göre, aradakiler tam.
 const FULL_WORKDAY_HOURS = 9;
+const WORK_START_MIN = 9 * 60;
+const WORK_END_MIN = 18 * 60;
+function timeToMin(t) {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(String(t || "").trim());
+  return m ? parseInt(m[1], 10) * 60 + parseInt(m[2], 10) : null;
+}
 function hoursBetween(startTime, endTime) {
-  const p = (t) => {
-    const m = /^(\d{1,2}):(\d{2})$/.exec(String(t || "").trim());
-    return m ? parseInt(m[1], 10) * 60 + parseInt(m[2], 10) : null;
-  };
-  const s = p(startTime);
-  const e = p(endTime);
+  const s = timeToMin(startTime);
+  const e = timeToMin(endTime);
   if (s == null || e == null || e <= s) return 0;
   return (e - s) / 60;
 }
+const r05 = (n) => Math.round(n * 2) / 2;
+const clamp01 = (n) => Math.min(1, Math.max(0, n));
 function leaveDays(dayType, start, end, startTime, endTime) {
   if (!start || !end) return 0;
   const base = diffDays(start, end);
   if (dayType === "half_day") return Math.round(0.5 * base * 10) / 10;
   if (dayType === "custom") {
-    const frac = Math.min(1, Math.max(0, hoursBetween(startTime, endTime) / FULL_WORKDAY_HOURS));
-    return Math.max(0.5, Math.round(frac * base * 2) / 2);
+    if (base <= 1) {
+      return Math.max(0.5, r05(clamp01(hoursBetween(startTime, endTime) / FULL_WORKDAY_HOURS)));
+    }
+    const sm = timeToMin(startTime);
+    const em = timeToMin(endTime);
+    const startFrac = sm == null ? 1 : r05(clamp01((WORK_END_MIN - Math.max(WORK_START_MIN, sm)) / (FULL_WORKDAY_HOURS * 60)));
+    const endFrac = em == null ? 1 : r05(clamp01((Math.min(WORK_END_MIN, em) - WORK_START_MIN) / (FULL_WORKDAY_HOURS * 60)));
+    return Math.max(0.5, startFrac + (base - 2) + endFrac);
   }
   return base;
 }
@@ -659,8 +670,8 @@ function MainApp({ token, user, onLogout }) {
     if (form.durationType === "custom") {
       if (!form.startTime) errs.startTime = "Bu alan zorunlu.";
       if (!form.endTime) errs.endTime = "Bu alan zorunlu.";
-      if (form.startTime && form.endTime && form.endTime <= form.startTime) {
-        errs.endTime = "Bitiş saati başlangıçtan sonra olmalı.";
+      if (form.start && form.start === form.end && form.startTime && form.endTime && form.endTime <= form.startTime) {
+        errs.endTime = "Tek günde bitiş saati başlangıçtan sonra olmalı.";
       }
     }
     if (!form.useResidenceCity && (!form.location || !form.location.trim())) {
@@ -780,8 +791,8 @@ function MainApp({ token, user, onLogout }) {
     if (adminForm.durationType === "custom") {
       if (!adminForm.startTime) errs.startTime = "Bu alan zorunlu.";
       if (!adminForm.endTime) errs.endTime = "Bu alan zorunlu.";
-      if (adminForm.startTime && adminForm.endTime && adminForm.endTime <= adminForm.startTime) {
-        errs.endTime = "Bitiş saati başlangıçtan sonra olmalı.";
+      if (adminForm.start && adminForm.start === adminForm.end && adminForm.startTime && adminForm.endTime && adminForm.endTime <= adminForm.startTime) {
+        errs.endTime = "Tek günde bitiş saati başlangıçtan sonra olmalı.";
       }
     }
     if (adminForm.contactPhone && adminForm.contactPhone.trim()) {
@@ -1122,7 +1133,7 @@ function MainApp({ token, user, onLogout }) {
                     ? "Her gün tam gün sayılır."
                     : form.durationType === "half_day"
                     ? "Her gün 0,5 gün sayılır."
-                    : "Girdiğiniz saatlere göre hesaplanır (tam gün = 9 saat), en yakın 0,5'e yuvarlanır."}
+                    : "Başlangıç günü 'başlangıç saati'nden, dönüş günü 'bitiş saati'ne kadar; aradaki günler tam gün sayılır (en yakın 0,5)."}
                 </p>
               </div>
               {form.durationType === "custom" && (

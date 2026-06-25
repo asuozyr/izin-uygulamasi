@@ -87,27 +87,40 @@ function colorForId(id) {
 
 const DAY_TYPES = ["full_day", "half_day", "custom"];
 const round1 = (n) => Math.round(n * 10) / 10;
+function timeToMin(t) {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(String(t || "").trim());
+  return m ? parseInt(m[1], 10) * 60 + parseInt(m[2], 10) : null;
+}
 function hoursBetween(startTime, endTime) {
-  const p = (t) => {
-    const m = /^(\d{1,2}):(\d{2})$/.exec(String(t || "").trim());
-    return m ? parseInt(m[1], 10) * 60 + parseInt(m[2], 10) : null;
-  };
-  const s = p(startTime);
-  const e = p(endTime);
+  const s = timeToMin(startTime);
+  const e = timeToMin(endTime);
   if (s == null || e == null || e <= s) return 0;
   return (e - s) / 60;
 }
 // Gün tipine göre toplam izin günü:
 //  full_day -> aralıktaki her gün 1
 //  half_day -> her gün 0,5
-//  custom   -> (saat farkı / tam iş günü) * gün sayısı, en az 0,5 (1 ondalık)
-const FULL_WORKDAY_HOURS = 9; // 09:00–18:00
+//  custom   -> tek gün: (bitiş-başlangıç)/9; çok gün: başlangıç günü "başlangıç saati"nden,
+//              dönüş günü "bitiş saati"ne kadar (her biri en yakın 0,5), aradaki günler tam.
+const FULL_WORKDAY_HOURS = 9;
+const WORK_START_MIN = 9 * 60; // 09:00
+const WORK_END_MIN = 18 * 60; // 18:00
+const r05 = (n) => Math.round(n * 2) / 2;
+const clamp01 = (n) => Math.min(1, Math.max(0, n));
 function computeDays(dayType, start, end, startTime, endTime) {
   const base = diffDays(start, end);
   if (dayType === "half_day") return round1(0.5 * base);
   if (dayType === "custom") {
-    const frac = Math.min(1, Math.max(0, hoursBetween(startTime, endTime) / FULL_WORKDAY_HOURS));
-    return Math.max(0.5, Math.round(frac * base * 2) / 2);
+    if (base <= 1) {
+      return Math.max(0.5, r05(clamp01(hoursBetween(startTime, endTime) / FULL_WORKDAY_HOURS)));
+    }
+    const sm = timeToMin(startTime);
+    const em = timeToMin(endTime);
+    // Başlangıç günü: başlangıç saatinden mesai sonuna kadar izinli
+    const startFrac = sm == null ? 1 : r05(clamp01((WORK_END_MIN - Math.max(WORK_START_MIN, sm)) / (FULL_WORKDAY_HOURS * 60)));
+    // Dönüş günü: mesai başından bitiş saatine kadar izinli
+    const endFrac = em == null ? 1 : r05(clamp01((Math.min(WORK_END_MIN, em) - WORK_START_MIN) / (FULL_WORKDAY_HOURS * 60)));
+    return Math.max(0.5, startFrac + (base - 2) + endFrac);
   }
   return base;
 }
