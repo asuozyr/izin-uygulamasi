@@ -13,8 +13,8 @@ const TYPE_BOXES = [
 ];
 const DURATION_LABEL = {
   full_day: "Tam gün",
-  half_day_morning: "Yarım gün (sabah)",
-  half_day_afternoon: "Yarım gün (öğleden sonra)",
+  half_day: "Yarım gün",
+  custom: "Saatli (kendi girişi)",
 };
 
 function formatDate(iso) {

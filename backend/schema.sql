@@ -24,7 +24,9 @@ CREATE TABLE IF NOT EXISTS leave_requests (
   status      TEXT NOT NULL DEFAULT 'beklemede'
               CHECK (status IN ('beklemede', 'onaylandi', 'reddedildi', 'iptal')),
   duration_type       TEXT NOT NULL DEFAULT 'full_day'
-              CHECK (duration_type IN ('full_day', 'half_day_morning', 'half_day_afternoon')),
+              CHECK (duration_type IN ('full_day', 'half_day', 'custom')),
+  use_residence_city  BOOLEAN NOT NULL DEFAULT false,
+  use_existing_phone  BOOLEAN NOT NULL DEFAULT false,
   source              TEXT NOT NULL DEFAULT 'self',
   created_by_admin_id TEXT REFERENCES employees(id),
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),

@@ -85,12 +85,46 @@ function colorForId(id) {
   return EMPLOYEE_COLORS[h % EMPLOYEE_COLORS.length];
 }
 
-const HALF_DAY_TYPES = ["half_day_morning", "half_day_afternoon"];
-// Yarım gün -> son gün 0,5 sayılır: (tarih aralığı günleri) - 0,5. Tek gün -> 0,5.
-function computeDays(durationType, start, end) {
+const DAY_TYPES = ["full_day", "half_day", "custom"];
+const round1 = (n) => Math.round(n * 10) / 10;
+function hoursBetween(startTime, endTime) {
+  const p = (t) => {
+    const m = /^(\d{1,2}):(\d{2})$/.exec(String(t || "").trim());
+    return m ? parseInt(m[1], 10) * 60 + parseInt(m[2], 10) : null;
+  };
+  const s = p(startTime);
+  const e = p(endTime);
+  if (s == null || e == null || e <= s) return 0;
+  return (e - s) / 60;
+}
+// Gün tipine göre toplam izin günü:
+//  full_day -> aralıktaki her gün 1
+//  half_day -> her gün 0,5
+//  custom   -> (saat farkı / tam iş günü) * gün sayısı, en az 0,5 (1 ondalık)
+const FULL_WORKDAY_HOURS = 9; // 09:00–18:00
+function computeDays(dayType, start, end, startTime, endTime) {
   const base = diffDays(start, end);
-  if (HALF_DAY_TYPES.includes(durationType)) return Math.max(0.5, base - 0.5);
+  if (dayType === "half_day") return round1(0.5 * base);
+  if (dayType === "custom") {
+    const frac = Math.min(1, Math.max(0, hoursBetween(startTime, endTime) / FULL_WORKDAY_HOURS));
+    return Math.max(0.5, Math.round(frac * base * 2) / 2);
+  }
   return base;
+}
+
+// Yer/telefon/saat alanlarını gün tipine ve "kayıtlı bilgimi kullan" seçeneklerine göre çöz.
+function resolveFormFields(body, dur) {
+  const useRes = !!body.useResidenceCity;
+  const usePhone = !!body.useExistingPhone;
+  const isCustom = dur === "custom";
+  return {
+    useRes,
+    usePhone,
+    location: useRes ? "İkamet şehrim" : (body.location || null),
+    contactPhone: usePhone ? "Mevcut cep telefonum" : (body.contactPhone || null),
+    startTime: isCustom ? (body.startTime || null) : null,
+    endTime: isCustom ? (body.endTime || null) : null,
+  };
 }
 
 // Yıllık izin hakediş hesabı:
@@ -344,7 +378,8 @@ app.get("/api/requests", requireAuth, async (req, res) => {
              duration_type AS "durationType",
              start_time AS "startTime", end_time AS "endTime",
              return_date::text AS "returnDate", location,
-             contact_phone AS "contactPhone"
+             contact_phone AS "contactPhone",
+             use_residence_city AS "useResidenceCity", use_existing_phone AS "useExistingPhone"
       FROM leave_requests
     `;
     const params = [];
@@ -371,8 +406,8 @@ app.get("/api/requests", requireAuth, async (req, res) => {
 // POST /api/requests  body: { type, start, end, reason, startTime, endTime, returnDate, location, contactPhone }
 app.post("/api/requests", requireAuth, async (req, res) => {
   try {
-    const { type, start, end, reason, startTime, endTime, returnDate, location, contactPhone, durationType } = req.body;
-    const dur = HALF_DAY_TYPES.includes(durationType) ? durationType : "full_day";
+    const { type, start, end, reason, returnDate, durationType } = req.body;
+    const dur = DAY_TYPES.includes(durationType) ? durationType : "full_day";
 
     if (!type || !start || !end) {
       return res.status(400).json({ error: "Eksik alanlar var." });
@@ -383,27 +418,31 @@ app.post("/api/requests", requireAuth, async (req, res) => {
     if (new Date(end) < new Date(start)) {
       return res.status(400).json({ error: "Bitiş tarihi başlangıçtan önce olamaz." });
     }
+    const f = resolveFormFields(req.body, dur);
+    if (dur === "custom" && (!f.startTime || !f.endTime)) {
+      return res.status(400).json({ error: "Saat girişi için başlangıç ve bitiş saati zorunludur." });
+    }
 
-    const days = computeDays(dur, start, end);
+    const days = computeDays(dur, start, end, f.startTime, f.endTime);
 
     // Not: Kalan yıllık izin bakiyesi yetersiz olsa bile talep oluşturulur.
-    // Onaylanınca çalışanın kalan bakiyesi eksiye ("-") düşebilir; engellenmez.
 
     const { rows } = await pool.query(
       `INSERT INTO leave_requests
-         (user_id, type, start_date, end_date, days, reason, start_time, end_time, return_date, location, contact_phone, status, duration_type)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'beklemede', $12)
+         (user_id, type, start_date, end_date, days, reason, start_time, end_time, return_date, location, contact_phone, status, duration_type, use_residence_city, use_existing_phone)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'beklemede', $12, $13, $14)
        RETURNING id, user_id AS "userId", type,
                  start_date::text AS "start",
                  end_date::text AS "end",
                  days::float AS days, reason, status, duration_type AS "durationType",
                  start_time AS "startTime", end_time AS "endTime",
                  return_date::text AS "returnDate", location,
-                 contact_phone AS "contactPhone"`,
+                 contact_phone AS "contactPhone",
+                 use_residence_city AS "useResidenceCity", use_existing_phone AS "useExistingPhone"`,
       [
         req.user.id, type, start, end, days, reason || null,
-        startTime || null, endTime || null, returnDate || null,
-        location || null, contactPhone || null, dur,
+        f.startTime, f.endTime, returnDate || null,
+        f.location, f.contactPhone, dur, f.useRes, f.usePhone,
       ]
     );
 
@@ -419,8 +458,8 @@ app.post("/api/requests", requireAuth, async (req, res) => {
 // body: { userId, type, start, end, returnDate, startTime?, endTime?, location?, contactPhone?, reason? }
 app.post("/api/admin/requests", requireAuth, requireAdmin, async (req, res) => {
   try {
-    const { userId, type, start, end, reason, startTime, endTime, returnDate, location, contactPhone, durationType } = req.body;
-    const dur = HALF_DAY_TYPES.includes(durationType) ? durationType : "full_day";
+    const { userId, type, start, end, reason, returnDate, durationType } = req.body;
+    const dur = DAY_TYPES.includes(durationType) ? durationType : "full_day";
 
     if (!userId || !type || !start || !end || !returnDate) {
       return res.status(400).json({ error: "Eksik alanlar var (çalışan, izin türü, başlangıç, bitiş ve işe dönüş tarihi zorunlu)." });
@@ -437,23 +476,29 @@ app.post("/api/admin/requests", requireAuth, requireAdmin, async (req, res) => {
       return res.status(404).json({ error: "Çalışan bulunamadı." });
     }
 
-    const days = computeDays(dur, start, end);
+    const f = resolveFormFields(req.body, dur);
+    if (dur === "custom" && (!f.startTime || !f.endTime)) {
+      return res.status(400).json({ error: "Saat girişi için başlangıç ve bitiş saati zorunludur." });
+    }
+
+    const days = computeDays(dur, start, end, f.startTime, f.endTime);
 
     const { rows } = await pool.query(
       `INSERT INTO leave_requests
-         (user_id, type, start_date, end_date, days, reason, start_time, end_time, return_date, location, contact_phone, status, source, created_by_admin_id, duration_type)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'onaylandi', 'admin_created', $12, $13)
+         (user_id, type, start_date, end_date, days, reason, start_time, end_time, return_date, location, contact_phone, status, source, created_by_admin_id, duration_type, use_residence_city, use_existing_phone)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'onaylandi', 'admin_created', $12, $13, $14, $15)
        RETURNING id, user_id AS "userId", type,
                  start_date::text AS "start",
                  end_date::text AS "end",
                  days::float AS days, reason, status, duration_type AS "durationType",
                  start_time AS "startTime", end_time AS "endTime",
                  return_date::text AS "returnDate", location,
-                 contact_phone AS "contactPhone"`,
+                 contact_phone AS "contactPhone",
+                 use_residence_city AS "useResidenceCity", use_existing_phone AS "useExistingPhone"`,
       [
         userId, type, start, end, days, reason || null,
-        startTime || null, endTime || null, returnDate || null,
-        location || null, contactPhone || null, req.user.id, dur,
+        f.startTime, f.endTime, returnDate || null,
+        f.location, f.contactPhone, req.user.id, dur, f.useRes, f.usePhone,
       ]
     );
 
@@ -485,8 +530,8 @@ app.put("/api/leave-requests/:id", requireAuth, async (req, res) => {
       }
     }
 
-    const { type, start, end, reason, startTime, endTime, returnDate, location, contactPhone, durationType } = req.body;
-    const dur = HALF_DAY_TYPES.includes(durationType) ? durationType : "full_day";
+    const { type, start, end, reason, returnDate, durationType } = req.body;
+    const dur = DAY_TYPES.includes(durationType) ? durationType : "full_day";
 
     if (!type || !start || !end) {
       return res.status(400).json({ error: "Eksik alanlar var." });
@@ -497,24 +542,29 @@ app.put("/api/leave-requests/:id", requireAuth, async (req, res) => {
     if (new Date(end) < new Date(start)) {
       return res.status(400).json({ error: "Bitiş tarihi başlangıçtan önce olamaz." });
     }
+    const f = resolveFormFields(req.body, dur);
+    if (dur === "custom" && (!f.startTime || !f.endTime)) {
+      return res.status(400).json({ error: "Saat girişi için başlangıç ve bitiş saati zorunludur." });
+    }
 
-    const days = computeDays(dur, start, end);
+    const days = computeDays(dur, start, end, f.startTime, f.endTime);
 
     const { rows } = await pool.query(
       `UPDATE leave_requests SET
          type = $1, start_date = $2, end_date = $3, days = $4, reason = $5,
          start_time = $6, end_time = $7, return_date = $8, location = $9, contact_phone = $10,
-         duration_type = $11, updated_at = now()
-       WHERE id = $12
+         duration_type = $11, use_residence_city = $12, use_existing_phone = $13, updated_at = now()
+       WHERE id = $14
        RETURNING id, user_id AS "userId", type,
                  start_date::text AS "start", end_date::text AS "end",
                  days::float AS days, reason, status, duration_type AS "durationType",
                  start_time AS "startTime", end_time AS "endTime",
-                 return_date::text AS "returnDate", location, contact_phone AS "contactPhone"`,
+                 return_date::text AS "returnDate", location, contact_phone AS "contactPhone",
+                 use_residence_city AS "useResidenceCity", use_existing_phone AS "useExistingPhone"`,
       [
         type, start, end, days, reason || null,
-        startTime || null, endTime || null, returnDate || null,
-        location || null, contactPhone || null, dur, id,
+        f.startTime, f.endTime, returnDate || null,
+        f.location, f.contactPhone, dur, f.useRes, f.usePhone, id,
       ]
     );
 
@@ -535,6 +585,7 @@ app.get("/api/leave-requests/:id", requireAuth, async (req, res) => {
               lr.start_time AS "startTime", lr.end_time AS "endTime",
               lr.return_date::text AS "returnDate", lr.location,
               lr.contact_phone AS "contactPhone",
+              lr.use_residence_city AS "useResidenceCity", lr.use_existing_phone AS "useExistingPhone",
               lr.created_at AS "createdAt",
               e.name AS "employeeName", e.initials AS "employeeInitials"
        FROM leave_requests lr

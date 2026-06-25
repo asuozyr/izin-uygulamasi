@@ -39,15 +39,15 @@ const RAMP_COLORS = {
 
 const DURATION_OPTIONS = [
   ["full_day", "Tam gün"],
-  ["half_day_morning", "Yarım gün (sabah)"],
-  ["half_day_afternoon", "Yarım gün (öğleden sonra)"],
+  ["half_day", "Yarım gün"],
+  ["custom", "Kendim gireceğim (saatli)"],
 ];
 const DURATION_LABEL = {
   full_day: "Tam gün",
-  half_day_morning: "Yarım gün (sabah)",
-  half_day_afternoon: "Yarım gün (öğleden sonra)",
+  half_day: "Yarım gün",
+  custom: "Saatli (kendim)",
 };
-const isHalfDay = (d) => d === "half_day_morning" || d === "half_day_afternoon";
+const isHalfDay = (d) => d === "half_day";
 
 const MONTH_NAMES = [
   "Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran",
@@ -61,11 +61,27 @@ function diffDays(start, end) {
   return d > 0 ? d : 1;
 }
 
-// Yarım gün seçildiğinde son gün 0,5 sayılır: tam günler + 0,5
-function leaveDays(durationType, start, end) {
+// Gün tipine göre toplam: full_day -> aralık; half_day -> 0,5*aralık; custom -> (saat/9)*aralık
+const FULL_WORKDAY_HOURS = 9;
+function hoursBetween(startTime, endTime) {
+  const p = (t) => {
+    const m = /^(\d{1,2}):(\d{2})$/.exec(String(t || "").trim());
+    return m ? parseInt(m[1], 10) * 60 + parseInt(m[2], 10) : null;
+  };
+  const s = p(startTime);
+  const e = p(endTime);
+  if (s == null || e == null || e <= s) return 0;
+  return (e - s) / 60;
+}
+function leaveDays(dayType, start, end, startTime, endTime) {
   if (!start || !end) return 0;
   const base = diffDays(start, end);
-  return isHalfDay(durationType) ? Math.max(0.5, base - 0.5) : base;
+  if (dayType === "half_day") return Math.round(0.5 * base * 10) / 10;
+  if (dayType === "custom") {
+    const frac = Math.min(1, Math.max(0, hoursBetween(startTime, endTime) / FULL_WORKDAY_HOURS));
+    return Math.max(0.5, Math.round(frac * base * 2) / 2);
+  }
+  return base;
 }
 const fmtDays = (n) => Number(n).toLocaleString("tr-TR", { maximumFractionDigits: 1 });
 
@@ -123,7 +139,7 @@ function Avatar({ user, size = 36 }) {
 // İzin talebindeki ek bilgileri (saat, işe dönüş, yer, telefon) kart içinde gösterir
 function RequestExtra({ r }) {
   const bits = [];
-  if (isHalfDay(r.durationType)) bits.push(r.durationType === "half_day_morning" ? "Yarım gün (sabah)" : "Yarım gün (öğleden sonra)");
+  if (r.durationType && r.durationType !== "full_day") bits.push(r.durationType === "half_day" ? "Yarım gün" : "Saatli");
   if (r.startTime || r.endTime) bits.push(`Saat: ${r.startTime || "?"}–${r.endTime || "?"}`);
   if (r.returnDate) bits.push(`İşe dönüş: ${formatDate(r.returnDate)}`);
   if (r.location) bits.push(`Yer: ${r.location}`);
@@ -540,7 +556,7 @@ function MainApp({ token, user, onLogout }) {
 
   const [form, setForm] = useState({
     type: "yillik", durationType: "full_day", start: "", end: "", startTime: "", endTime: "",
-      returnDate: "", location: "", countryCode: "+90", contactPhone: "", reason: "",
+      returnDate: "", location: "", countryCode: "+90", contactPhone: "", reason: "", useResidenceCity: false, useExistingPhone: false,
   });
   const [fieldErrors, setFieldErrors] = useState({});
   const [formError, setFormError] = useState("");
@@ -560,7 +576,7 @@ function MainApp({ token, user, onLogout }) {
   // --- Yönetici: çalışan adına izin girişi (ayrı form state'i) ---
   const [adminForm, setAdminForm] = useState({
     userId: "", type: "yillik", durationType: "full_day", start: "", end: "", returnDate: "",
-    startTime: "", endTime: "", location: "", countryCode: "+90", contactPhone: "", reason: "",
+    startTime: "", endTime: "", location: "", countryCode: "+90", contactPhone: "", reason: "", useResidenceCity: false, useExistingPhone: false,
   });
   const [adminErrors, setAdminErrors] = useState({});
   const [adminSubmitting, setAdminSubmitting] = useState(false);
@@ -640,11 +656,20 @@ function MainApp({ token, user, onLogout }) {
     if (form.start && form.end && new Date(form.end) < new Date(form.start)) {
       errs.end = "Bitiş tarihi başlangıçtan önce olamaz.";
     }
-    if (!form.startTime) errs.startTime = "Bu alan zorunlu.";
-    if (!form.endTime) errs.endTime = "Bu alan zorunlu.";
-    if (!form.location || !form.location.trim()) errs.location = "Bu alan zorunlu.";
-    const pErr = phoneError(form.countryCode, form.contactPhone);
-    if (pErr) errs.contactPhone = pErr;
+    if (form.durationType === "custom") {
+      if (!form.startTime) errs.startTime = "Bu alan zorunlu.";
+      if (!form.endTime) errs.endTime = "Bu alan zorunlu.";
+      if (form.startTime && form.endTime && form.endTime <= form.startTime) {
+        errs.endTime = "Bitiş saati başlangıçtan sonra olmalı.";
+      }
+    }
+    if (!form.useResidenceCity && (!form.location || !form.location.trim())) {
+      errs.location = "Bu alan zorunlu.";
+    }
+    if (!form.useExistingPhone) {
+      const pErr = phoneError(form.countryCode, form.contactPhone);
+      if (pErr) errs.contactPhone = pErr;
+    }
     return errs;
   }
 
@@ -664,11 +689,13 @@ function MainApp({ token, user, onLogout }) {
       durationType: form.durationType,
       start: form.start,
       end: form.end,
-      startTime: form.startTime,
-      endTime: form.endTime,
+      startTime: form.durationType === "custom" ? form.startTime : "",
+      endTime: form.durationType === "custom" ? form.endTime : "",
       returnDate: form.returnDate,
-      location: form.location.trim(),
-      contactPhone: `${form.countryCode} ${form.contactPhone}`.trim(),
+      useResidenceCity: form.useResidenceCity,
+      useExistingPhone: form.useExistingPhone,
+      location: form.useResidenceCity ? "" : form.location.trim(),
+      contactPhone: form.useExistingPhone ? "" : `${form.countryCode} ${form.contactPhone}`.trim(),
       reason: form.reason,
     };
     try {
@@ -688,7 +715,7 @@ function MainApp({ token, user, onLogout }) {
       }
       setForm({
         type: "yillik", durationType: "full_day", start: "", end: "", startTime: "", endTime: "",
-        returnDate: "", location: "", countryCode: "+90", contactPhone: "", reason: "",
+        returnDate: "", location: "", countryCode: "+90", contactPhone: "", reason: "", useResidenceCity: false, useExistingPhone: false,
       });
       setFieldErrors({});
     } catch (err) {
@@ -717,6 +744,8 @@ function MainApp({ token, user, onLogout }) {
       countryCode: cc,
       contactPhone: num,
       reason: r.reason || "",
+      useResidenceCity: !!r.useResidenceCity,
+      useExistingPhone: !!r.useExistingPhone,
     });
     setFieldErrors({});
     setFormError("");
@@ -729,7 +758,7 @@ function MainApp({ token, user, onLogout }) {
     setEditingId(null);
     setForm({
       type: "yillik", durationType: "full_day", start: "", end: "", startTime: "", endTime: "",
-      returnDate: "", location: "", countryCode: "+90", contactPhone: "", reason: "",
+      returnDate: "", location: "", countryCode: "+90", contactPhone: "", reason: "", useResidenceCity: false, useExistingPhone: false,
     });
     setFieldErrors({});
     setFormError("");
@@ -748,6 +777,13 @@ function MainApp({ token, user, onLogout }) {
       errs.end = "Bitiş tarihi başlangıçtan önce olamaz.";
     }
     if (!adminForm.returnDate) errs.returnDate = "Bu alan zorunlu.";
+    if (adminForm.durationType === "custom") {
+      if (!adminForm.startTime) errs.startTime = "Bu alan zorunlu.";
+      if (!adminForm.endTime) errs.endTime = "Bu alan zorunlu.";
+      if (adminForm.startTime && adminForm.endTime && adminForm.endTime <= adminForm.startTime) {
+        errs.endTime = "Bitiş saati başlangıçtan sonra olmalı.";
+      }
+    }
     if (adminForm.contactPhone && adminForm.contactPhone.trim()) {
       const pErr = phoneError(adminForm.countryCode, adminForm.contactPhone);
       if (pErr) errs.contactPhone = pErr;
@@ -771,8 +807,8 @@ function MainApp({ token, user, onLogout }) {
         start: adminForm.start,
         end: adminForm.end,
         returnDate: adminForm.returnDate,
-        startTime: adminForm.startTime,
-        endTime: adminForm.endTime,
+        startTime: adminForm.durationType === "custom" ? adminForm.startTime : "",
+        endTime: adminForm.durationType === "custom" ? adminForm.endTime : "",
         location: adminForm.location.trim(),
         contactPhone: adminForm.contactPhone.trim() ? `${adminForm.countryCode} ${adminForm.contactPhone}`.trim() : "",
         reason: adminForm.reason,
@@ -781,7 +817,7 @@ function MainApp({ token, user, onLogout }) {
       setAdminMsg(`${empName} adına izin kaydı oluşturuldu ve onaylandı.`);
       setAdminForm({
         userId: "", type: "yillik", durationType: "full_day", start: "", end: "", returnDate: "",
-        startTime: "", endTime: "", location: "", countryCode: "+90", contactPhone: "", reason: "",
+        startTime: "", endTime: "", location: "", countryCode: "+90", contactPhone: "", reason: "", useResidenceCity: false, useExistingPhone: false,
       });
       setAdminErrors({});
       refreshRequests();
@@ -928,7 +964,7 @@ function MainApp({ token, user, onLogout }) {
           {isAdmin && (
             <button className="ev-btn-ghost" onClick={togglePreview}>
               <i className={`ti ${previewEmployee ? "ti-arrow-back-up" : "ti-eye"}`} aria-hidden="true"></i>
-              {previewEmployee ? "Yönetici görünümü" : "Çalışan görünümü"}
+              {previewEmployee ? "Yönetici görünümüne geç" : "Çalışan görünümüne geç"}
             </button>
           )}
         </div>
@@ -1052,12 +1088,6 @@ function MainApp({ token, user, onLogout }) {
         }}>
           <form onSubmit={submitRequest}>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "12px" }}>
-              <div style={{ gridColumn: "1 / -1" }}>
-                <label style={{ fontSize: 13, color: "var(--color-text-secondary)", display: "block", marginBottom: 4 }}>İzin süresi</label>
-                <select value={form.durationType} onChange={(e) => updateField("durationType", e.target.value)} style={{ width: "100%" }}>
-                  {DURATION_OPTIONS.map(([v, l]) => (<option key={v} value={v}>{l}</option>))}
-                </select>
-              </div>
               <div>
                 <label style={{ fontSize: 13, color: "var(--color-text-secondary)", display: "block", marginBottom: 4 }}>İzin türü</label>
                 <select value={form.type} onChange={(e) => updateField("type", e.target.value)} style={{ width: "100%", ...errStyle("type") }}>
@@ -1081,54 +1111,90 @@ function MainApp({ token, user, onLogout }) {
                 <label style={{ fontSize: 13, color: "var(--color-text-secondary)", display: "block", marginBottom: 4 }}>İzin bitiş tarihi</label>
                 <input type="date" value={form.end} onChange={(e) => updateField("end", e.target.value)} style={{ width: "100%", ...errStyle("end") }} />
                 {fieldErrors.end && <p style={{ color: ERR_COLOR, fontSize: 12, margin: "4px 0 0" }}>{fieldErrors.end}</p>}
-                {isHalfDay(form.durationType) && <p style={{ fontSize: 11.5, color: "var(--color-text-tertiary)", margin: "4px 0 0" }}>Son gün yarım sayılır (0,5)</p>}
               </div>
-              <div>
-                <label style={{ fontSize: 13, color: "var(--color-text-secondary)", display: "block", marginBottom: 4 }}>Başlangıç saati</label>
-                <input type="time" value={form.startTime} onChange={(e) => updateField("startTime", e.target.value)} style={{ width: "100%", ...errStyle("startTime") }} />
-                {fieldErrors.startTime && <p style={{ color: ERR_COLOR, fontSize: 12, margin: "4px 0 0" }}>{fieldErrors.startTime}</p>}
+              <div style={{ gridColumn: "1 / -1" }}>
+                <label style={{ fontSize: 13, color: "var(--color-text-secondary)", display: "block", marginBottom: 4 }}>Gün tipi</label>
+                <select value={form.durationType} onChange={(e) => updateField("durationType", e.target.value)} style={{ width: "100%" }}>
+                  {DURATION_OPTIONS.map(([v, l]) => (<option key={v} value={v}>{l}</option>))}
+                </select>
+                <p style={{ fontSize: 11.5, color: "var(--color-text-tertiary)", margin: "4px 0 0" }}>
+                  {form.durationType === "full_day"
+                    ? "Her gün tam gün sayılır."
+                    : form.durationType === "half_day"
+                    ? "Her gün 0,5 gün sayılır."
+                    : "Girdiğiniz saatlere göre hesaplanır (tam gün = 9 saat), en yakın 0,5'e yuvarlanır."}
+                </p>
               </div>
-              <div>
-                <label style={{ fontSize: 13, color: "var(--color-text-secondary)", display: "block", marginBottom: 4 }}>Bitiş saati</label>
-                <input type="time" value={form.endTime} onChange={(e) => updateField("endTime", e.target.value)} style={{ width: "100%", ...errStyle("endTime") }} />
-                {fieldErrors.endTime && <p style={{ color: ERR_COLOR, fontSize: 12, margin: "4px 0 0" }}>{fieldErrors.endTime}</p>}
-              </div>
+              {form.durationType === "custom" && (
+                <>
+                  <div>
+                    <label style={{ fontSize: 13, color: "var(--color-text-secondary)", display: "block", marginBottom: 4 }}>Başlangıç saati</label>
+                    <input type="time" value={form.startTime} onChange={(e) => updateField("startTime", e.target.value)} style={{ width: "100%", ...errStyle("startTime") }} />
+                    {fieldErrors.startTime && <p style={{ color: ERR_COLOR, fontSize: 12, margin: "4px 0 0" }}>{fieldErrors.startTime}</p>}
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 13, color: "var(--color-text-secondary)", display: "block", marginBottom: 4 }}>Bitiş saati</label>
+                    <input type="time" value={form.endTime} onChange={(e) => updateField("endTime", e.target.value)} style={{ width: "100%", ...errStyle("endTime") }} />
+                    {fieldErrors.endTime && <p style={{ color: ERR_COLOR, fontSize: 12, margin: "4px 0 0" }}>{fieldErrors.endTime}</p>}
+                  </div>
+                </>
+              )}
               <div>
                 <label style={{ fontSize: 13, color: "var(--color-text-secondary)", display: "block", marginBottom: 4 }}>İzin geçirilecek yer</label>
-                <input type="text" value={form.location} onChange={(e) => updateField("location", e.target.value)}
-                  placeholder="Örn. İzmir, memleket"
-                  style={{ width: "100%", fontFamily: "inherit", fontSize: 14, padding: "6px 10px", borderRadius: "var(--border-radius-md)", border: `1px solid ${fieldErrors.location ? ERR_COLOR : "var(--color-border-secondary)"}`, boxSizing: "border-box" }} />
-                {fieldErrors.location && <p style={{ color: ERR_COLOR, fontSize: 12, margin: "4px 0 0" }}>{fieldErrors.location}</p>}
+                <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, marginBottom: 6, cursor: "pointer" }}>
+                  <input type="checkbox" checked={form.useResidenceCity} onChange={(e) => updateField("useResidenceCity", e.target.checked)} />
+                  İkamet şehrim
+                </label>
+                {form.useResidenceCity ? (
+                  <p style={{ fontSize: 12.5, color: "var(--color-text-tertiary)", margin: 0 }}>İkamet şehriniz kullanılacak.</p>
+                ) : (
+                  <>
+                    <input type="text" value={form.location} onChange={(e) => updateField("location", e.target.value)}
+                      placeholder="Örn. İzmir, memleket"
+                      style={{ width: "100%", fontFamily: "inherit", fontSize: 14, padding: "6px 10px", borderRadius: "var(--border-radius-md)", border: `1px solid ${fieldErrors.location ? ERR_COLOR : "var(--color-border-secondary)"}`, boxSizing: "border-box" }} />
+                    {fieldErrors.location && <p style={{ color: ERR_COLOR, fontSize: 12, margin: "4px 0 0" }}>{fieldErrors.location}</p>}
+                  </>
+                )}
               </div>
               <div>
                 <label style={{ fontSize: 13, color: "var(--color-text-secondary)", display: "block", marginBottom: 4 }}>Ulaşılabilecek telefon</label>
-                <div style={{ display: "flex", gap: 6 }}>
-                  <input type="text" list="ulke-kodlari" value={form.countryCode} onChange={(e) => updateField("countryCode", e.target.value)}
-                    aria-label="Ülke kodu"
-                    style={{ width: 78, flexShrink: 0, fontFamily: "inherit", fontSize: 14, padding: "6px 8px", borderRadius: "var(--border-radius-md)", border: `1px solid ${fieldErrors.contactPhone ? ERR_COLOR : "var(--color-border-secondary)"}`, boxSizing: "border-box" }} />
-                  <input type="tel" value={form.contactPhone} onChange={(e) => updateField("contactPhone", e.target.value)}
-                    placeholder="5xx xxx xx xx"
-                    style={{ flex: 1, minWidth: 0, fontFamily: "inherit", fontSize: 14, padding: "6px 10px", borderRadius: "var(--border-radius-md)", border: `1px solid ${fieldErrors.contactPhone ? ERR_COLOR : "var(--color-border-secondary)"}`, boxSizing: "border-box" }} />
-                  <datalist id="ulke-kodlari">
-                    <option value="+90">Türkiye</option>
-                    <option value="+1">ABD / Kanada</option>
-                    <option value="+44">Birleşik Krallık</option>
-                    <option value="+49">Almanya</option>
-                    <option value="+33">Fransa</option>
-                    <option value="+31">Hollanda</option>
-                    <option value="+39">İtalya</option>
-                    <option value="+34">İspanya</option>
-                    <option value="+41">İsviçre</option>
-                    <option value="+43">Avusturya</option>
-                    <option value="+32">Belçika</option>
-                    <option value="+7">Rusya</option>
-                    <option value="+971">BAE</option>
-                    <option value="+966">S. Arabistan</option>
-                    <option value="+994">Azerbaycan</option>
-                  </datalist>
-                </div>
-                <p style={{ fontSize: 11.5, color: "var(--color-text-tertiary)", margin: "4px 0 0" }}>Örn. +90 5xx xxx xx xx</p>
-                {fieldErrors.contactPhone && <p style={{ color: ERR_COLOR, fontSize: 12, margin: "4px 0 0" }}>{fieldErrors.contactPhone}</p>}
+                <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, marginBottom: 6, cursor: "pointer" }}>
+                  <input type="checkbox" checked={form.useExistingPhone} onChange={(e) => updateField("useExistingPhone", e.target.checked)} />
+                  Mevcut cep telefonum
+                </label>
+                {form.useExistingPhone ? (
+                  <p style={{ fontSize: 12.5, color: "var(--color-text-tertiary)", margin: 0 }}>Kayıtlı cep telefonunuz kullanılacak.</p>
+                ) : (
+                  <>
+                    <div style={{ display: "flex", gap: 6 }}>
+                      <input type="text" list="ulke-kodlari" value={form.countryCode} onChange={(e) => updateField("countryCode", e.target.value)}
+                        aria-label="Ülke kodu"
+                        style={{ width: 78, flexShrink: 0, fontFamily: "inherit", fontSize: 14, padding: "6px 8px", borderRadius: "var(--border-radius-md)", border: `1px solid ${fieldErrors.contactPhone ? ERR_COLOR : "var(--color-border-secondary)"}`, boxSizing: "border-box" }} />
+                      <input type="tel" value={form.contactPhone} onChange={(e) => updateField("contactPhone", e.target.value)}
+                        placeholder="5xx xxx xx xx"
+                        style={{ flex: 1, minWidth: 0, fontFamily: "inherit", fontSize: 14, padding: "6px 10px", borderRadius: "var(--border-radius-md)", border: `1px solid ${fieldErrors.contactPhone ? ERR_COLOR : "var(--color-border-secondary)"}`, boxSizing: "border-box" }} />
+                      <datalist id="ulke-kodlari">
+                        <option value="+90">Türkiye</option>
+                        <option value="+1">ABD / Kanada</option>
+                        <option value="+44">Birleşik Krallık</option>
+                        <option value="+49">Almanya</option>
+                        <option value="+33">Fransa</option>
+                        <option value="+31">Hollanda</option>
+                        <option value="+39">İtalya</option>
+                        <option value="+34">İspanya</option>
+                        <option value="+41">İsviçre</option>
+                        <option value="+43">Avusturya</option>
+                        <option value="+32">Belçika</option>
+                        <option value="+7">Rusya</option>
+                        <option value="+971">BAE</option>
+                        <option value="+966">S. Arabistan</option>
+                        <option value="+994">Azerbaycan</option>
+                      </datalist>
+                    </div>
+                    <p style={{ fontSize: 11.5, color: "var(--color-text-tertiary)", margin: "4px 0 0" }}>Örn. +90 5xx xxx xx xx</p>
+                    {fieldErrors.contactPhone && <p style={{ color: ERR_COLOR, fontSize: 12, margin: "4px 0 0" }}>{fieldErrors.contactPhone}</p>}
+                  </>
+                )}
               </div>
             </div>
             <div style={{ marginBottom: "12px" }}>
@@ -1143,8 +1209,8 @@ function MainApp({ token, user, onLogout }) {
             </div>
             {form.start && form.end && new Date(form.end) >= new Date(form.start) && (
               <p style={{ fontSize: 13, color: "var(--color-text-secondary)", marginBottom: 12 }}>
-                Toplam: <strong style={{ fontWeight: 500 }}>{fmtDays(leaveDays(form.durationType, form.start, form.end))} gün</strong>
-                {isHalfDay(form.durationType) && <span style={{ color: "var(--color-text-tertiary)" }}> (son gün yarım)</span>}
+                Toplam: <strong style={{ fontWeight: 500 }}>{fmtDays(leaveDays(form.durationType, form.start, form.end, form.startTime, form.endTime))} gün</strong>
+                {form.durationType !== "full_day" && <span style={{ color: "var(--color-text-tertiary)" }}> ({DURATION_LABEL[form.durationType]})</span>}
               </p>
             )}
             {formError && (
@@ -1338,12 +1404,6 @@ function MainApp({ token, user, onLogout }) {
             </div>
 
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
-              <div style={{ gridColumn: "1 / -1" }}>
-                <label style={{ fontSize: 13, color: "var(--color-text-secondary)", display: "block", marginBottom: 4 }}>İzin süresi</label>
-                <select value={adminForm.durationType} onChange={(e) => updateAdminField("durationType", e.target.value)} style={{ width: "100%" }}>
-                  {DURATION_OPTIONS.map(([v, l]) => (<option key={v} value={v}>{l}</option>))}
-                </select>
-              </div>
               <div>
                 <label style={{ fontSize: 13, color: "var(--color-text-secondary)", display: "block", marginBottom: 4 }}>İzin türü</label>
                 <select value={adminForm.type} onChange={(e) => updateAdminField("type", e.target.value)} style={{ width: "100%", ...adminErrStyle("type") }}>
@@ -1365,16 +1425,27 @@ function MainApp({ token, user, onLogout }) {
                 <label style={{ fontSize: 13, color: "var(--color-text-secondary)", display: "block", marginBottom: 4 }}>İzin bitiş tarihi</label>
                 <input type="date" value={adminForm.end} onChange={(e) => updateAdminField("end", e.target.value)} style={{ width: "100%", ...adminErrStyle("end") }} />
                 {adminErrors.end && <p style={{ color: ERR_COLOR, fontSize: 12, margin: "4px 0 0" }}>{adminErrors.end}</p>}
-                {isHalfDay(adminForm.durationType) && <p style={{ fontSize: 11.5, color: "var(--color-text-tertiary)", margin: "4px 0 0" }}>Son gün yarım sayılır (0,5)</p>}
               </div>
-              <div>
-                <label style={{ fontSize: 13, color: "var(--color-text-secondary)", display: "block", marginBottom: 4 }}>Başlangıç saati <span style={{ color: "var(--color-text-tertiary)" }}>(opsiyonel)</span></label>
-                <input type="time" value={adminForm.startTime} onChange={(e) => updateAdminField("startTime", e.target.value)} style={{ width: "100%" }} />
+              <div style={{ gridColumn: "1 / -1" }}>
+                <label style={{ fontSize: 13, color: "var(--color-text-secondary)", display: "block", marginBottom: 4 }}>Gün tipi</label>
+                <select value={adminForm.durationType} onChange={(e) => updateAdminField("durationType", e.target.value)} style={{ width: "100%" }}>
+                  {DURATION_OPTIONS.map(([v, l]) => (<option key={v} value={v}>{l}</option>))}
+                </select>
               </div>
-              <div>
-                <label style={{ fontSize: 13, color: "var(--color-text-secondary)", display: "block", marginBottom: 4 }}>Bitiş saati <span style={{ color: "var(--color-text-tertiary)" }}>(opsiyonel)</span></label>
-                <input type="time" value={adminForm.endTime} onChange={(e) => updateAdminField("endTime", e.target.value)} style={{ width: "100%" }} />
-              </div>
+              {adminForm.durationType === "custom" && (
+                <>
+                  <div>
+                    <label style={{ fontSize: 13, color: "var(--color-text-secondary)", display: "block", marginBottom: 4 }}>Başlangıç saati</label>
+                    <input type="time" value={adminForm.startTime} onChange={(e) => updateAdminField("startTime", e.target.value)} style={{ width: "100%", ...adminErrStyle("startTime") }} />
+                    {adminErrors.startTime && <p style={{ color: ERR_COLOR, fontSize: 12, margin: "4px 0 0" }}>{adminErrors.startTime}</p>}
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 13, color: "var(--color-text-secondary)", display: "block", marginBottom: 4 }}>Bitiş saati</label>
+                    <input type="time" value={adminForm.endTime} onChange={(e) => updateAdminField("endTime", e.target.value)} style={{ width: "100%", ...adminErrStyle("endTime") }} />
+                    {adminErrors.endTime && <p style={{ color: ERR_COLOR, fontSize: 12, margin: "4px 0 0" }}>{adminErrors.endTime}</p>}
+                  </div>
+                </>
+              )}
               <div>
                 <label style={{ fontSize: 13, color: "var(--color-text-secondary)", display: "block", marginBottom: 4 }}>İzin geçirilecek yer <span style={{ color: "var(--color-text-tertiary)" }}>(opsiyonel)</span></label>
                 <input type="text" value={adminForm.location} onChange={(e) => updateAdminField("location", e.target.value)} placeholder="Örn. İzmir"
@@ -1408,8 +1479,8 @@ function MainApp({ token, user, onLogout }) {
 
             {adminForm.start && adminForm.end && new Date(adminForm.end) >= new Date(adminForm.start) && (
               <p style={{ fontSize: 13, color: "var(--color-text-secondary)", marginBottom: 14 }}>
-                Toplam: <strong style={{ fontWeight: 500 }}>{fmtDays(leaveDays(adminForm.durationType, adminForm.start, adminForm.end))} gün</strong>
-                {isHalfDay(adminForm.durationType) && <span style={{ color: "var(--color-text-tertiary)" }}> (son gün yarım)</span>}
+                Toplam: <strong style={{ fontWeight: 500 }}>{fmtDays(leaveDays(adminForm.durationType, adminForm.start, adminForm.end, adminForm.startTime, adminForm.endTime))} gün</strong>
+                {adminForm.durationType !== "full_day" && <span style={{ color: "var(--color-text-tertiary)" }}> ({DURATION_LABEL[adminForm.durationType]})</span>}
               </p>
             )}
 
@@ -1582,7 +1653,7 @@ function MainApp({ token, user, onLogout }) {
                     <div style={{ fontWeight: 500, fontSize: 14 }}>{ev.name}</div>
                     <div style={{ fontSize: 12.5, color: "var(--color-text-secondary)", display: "flex", gap: 8, flexWrap: "wrap" }}>
                       <span>{LEAVE_TYPES[ev.type]?.label || ev.type}</span>
-                      {isHalfDay(ev.durationType) && <span>· {ev.durationType === "half_day_morning" ? "Yarım gün (sabah)" : "Yarım gün (öğleden sonra)"}</span>}
+                      {ev.durationType && ev.durationType !== "full_day" && <span>· {ev.durationType === "half_day" ? "Yarım gün" : "Saatli"}</span>}
                       {(ev.startTime || ev.endTime) && <span>· {ev.startTime || "?"}–{ev.endTime || "?"}</span>}
                     </div>
                   </div>
