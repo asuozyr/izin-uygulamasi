@@ -557,6 +557,9 @@ function MainApp({ token, user, onLogout }) {
   // Takvim: responsive görünür izin sayısı + gün detay modalı
   const [calMax, setCalMax] = useState(3);
   const [dayModal, setDayModal] = useState(null); // { day, entries } | null
+  const [calPicker, setCalPicker] = useState(false); // ay/yıl seçici açık mı
+  const [pickerYear, setPickerYear] = useState(now.getFullYear());
+  const calPickerRef = useRef(null);
   useEffect(() => {
     const calc = () => setCalMax(window.innerWidth < 700 ? 1 : window.innerWidth < 1100 ? 2 : 3);
     calc();
@@ -569,6 +572,15 @@ function MainApp({ token, user, onLogout }) {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [dayModal]);
+  // Ay/yıl seçici: ESC ve dışarı tıklama ile kapan
+  useEffect(() => {
+    if (!calPicker) return;
+    const onKey = (e) => { if (e.key === "Escape") setCalPicker(false); };
+    const onClick = (e) => { if (calPickerRef.current && !calPickerRef.current.contains(e.target)) setCalPicker(false); };
+    window.addEventListener("keydown", onKey);
+    document.addEventListener("mousedown", onClick);
+    return () => { window.removeEventListener("keydown", onKey); document.removeEventListener("mousedown", onClick); };
+  }, [calPicker]);
 
   const [form, setForm] = useState({
     type: "yillik", durationType: "full_day", start: "", end: "", startTime: "", endTime: "",
@@ -897,6 +909,8 @@ function MainApp({ token, user, onLogout }) {
 
   function goToPrevYear() { setCalendarYear((y) => y - 1); }
   function goToNextYear() { setCalendarYear((y) => y + 1); }
+  function openCalPicker() { setPickerYear(calendarYear); setCalPicker((v) => !v); }
+  function pickMonth(m) { setCalendarMonth(m); setCalendarYear(pickerYear); setCalPicker(false); }
 
   const firstDay = new Date(calendarYear, calendarMonth - 1, 1);
   const startWeekday = (firstDay.getDay() + 6) % 7; // Monday=0
@@ -1573,27 +1587,67 @@ function MainApp({ token, user, onLogout }) {
       {/* ---- Takvim ---- */}
       {view === "takvim" && (
         <div>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12, gap: 8, flexWrap: "wrap" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <button onClick={goToPrevYear} style={{ fontSize: 13, padding: "4px 9px", display: "flex", alignItems: "center", gap: 3 }} title="Önceki yıl" aria-label="Önceki yıl">
-                <i className="ti ti-chevrons-left" style={{ fontSize: 14 }} aria-hidden="true"></i>
-                Yıl
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 12 }}>
+            <div ref={calPickerRef} style={{ position: "relative", display: "flex", alignItems: "center", gap: 4 }}>
+              <button onClick={goToPrevYear} title="Önceki yıl" aria-label="Önceki yıl"
+                style={{ width: 32, height: 32, display: "grid", placeItems: "center", padding: 0 }}>
+                <i className="ti ti-chevrons-left" style={{ fontSize: 16 }} aria-hidden="true"></i>
               </button>
-              <button onClick={goToPrevMonth} style={{ fontSize: 13, padding: "4px 10px", display: "flex", alignItems: "center", gap: 4 }} title="Önceki ay">
-                <i className="ti ti-chevron-left" style={{ fontSize: 14 }} aria-hidden="true"></i>
-                Ay
+              <button onClick={goToPrevMonth} title="Önceki ay" aria-label="Önceki ay"
+                style={{ width: 32, height: 32, display: "grid", placeItems: "center", padding: 0 }}>
+                <i className="ti ti-chevron-left" style={{ fontSize: 16 }} aria-hidden="true"></i>
               </button>
-            </div>
-            <p style={{ fontSize: 14, fontWeight: 500, margin: 0 }}>{MONTH_NAMES[calendarMonth - 1]} {calendarYear}</p>
-            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <button onClick={goToNextMonth} style={{ fontSize: 13, padding: "4px 10px", display: "flex", alignItems: "center", gap: 4 }} title="Sonraki ay">
-                Ay
-                <i className="ti ti-chevron-right" style={{ fontSize: 14 }} aria-hidden="true"></i>
+              <button onClick={openCalPicker} aria-haspopup="true" aria-expanded={calPicker}
+                style={{ minWidth: 150, fontSize: 14, fontWeight: 600, padding: "6px 12px", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+                {MONTH_NAMES[calendarMonth - 1]} {calendarYear}
+                <i className="ti ti-chevron-down" style={{ fontSize: 14, opacity: 0.7 }} aria-hidden="true"></i>
               </button>
-              <button onClick={goToNextYear} style={{ fontSize: 13, padding: "4px 9px", display: "flex", alignItems: "center", gap: 3 }} title="Sonraki yıl" aria-label="Sonraki yıl">
-                Yıl
-                <i className="ti ti-chevrons-right" style={{ fontSize: 14 }} aria-hidden="true"></i>
+              <button onClick={goToNextMonth} title="Sonraki ay" aria-label="Sonraki ay"
+                style={{ width: 32, height: 32, display: "grid", placeItems: "center", padding: 0 }}>
+                <i className="ti ti-chevron-right" style={{ fontSize: 16 }} aria-hidden="true"></i>
               </button>
+              <button onClick={goToNextYear} title="Sonraki yıl" aria-label="Sonraki yıl"
+                style={{ width: 32, height: 32, display: "grid", placeItems: "center", padding: 0 }}>
+                <i className="ti ti-chevrons-right" style={{ fontSize: 16 }} aria-hidden="true"></i>
+              </button>
+
+              {calPicker && (
+                <div role="dialog" aria-label="Ay ve yıl seç"
+                  style={{
+                    position: "absolute", top: "calc(100% + 8px)", left: "50%", transform: "translateX(-50%)",
+                    background: "var(--color-background-primary)", border: "1px solid var(--color-border-tertiary)",
+                    borderRadius: 12, boxShadow: "0 8px 28px rgba(0,0,0,0.18)", padding: 12, width: 280, zIndex: 50,
+                  }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+                    <button onClick={() => setPickerYear((y) => y - 1)} aria-label="Önceki yıl"
+                      style={{ width: 30, height: 30, display: "grid", placeItems: "center", padding: 0 }}>
+                      <i className="ti ti-chevron-left" style={{ fontSize: 15 }} aria-hidden="true"></i>
+                    </button>
+                    <span style={{ fontSize: 15, fontWeight: 600 }}>{pickerYear}</span>
+                    <button onClick={() => setPickerYear((y) => y + 1)} aria-label="Sonraki yıl"
+                      style={{ width: 30, height: 30, display: "grid", placeItems: "center", padding: 0 }}>
+                      <i className="ti ti-chevron-right" style={{ fontSize: 15 }} aria-hidden="true"></i>
+                    </button>
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6 }}>
+                    {MONTH_NAMES.map((mn, i) => {
+                      const selected = pickerYear === calendarYear && calendarMonth === i + 1;
+                      return (
+                        <button key={mn} onClick={() => pickMonth(i + 1)}
+                          style={{
+                            fontSize: 13, padding: "8px 4px", borderRadius: 8,
+                            border: selected ? `1px solid ${BRAND.primary}` : "1px solid var(--color-border-secondary)",
+                            background: selected ? BRAND.primary : "var(--color-background-primary)",
+                            color: selected ? "#fff" : "var(--color-text-primary)",
+                            fontWeight: selected ? 600 : 400, cursor: "pointer",
+                          }}>
+                          {mn.slice(0, 3)}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4, marginBottom: 4 }}>
