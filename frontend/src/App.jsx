@@ -69,6 +69,8 @@ function diffDays(start, end) {
 // Gün tipine göre toplam: full_day -> aralık; half_day -> 0,5*aralık;
 // custom -> tek gün: (bitiş-başlangıç)/9; çok gün: sınır günler saatlere göre, aradakiler tam.
 const FULL_WORKDAY_HOURS = 9;
+const CUSTOM_MIN_HOURS = 2;
+const CUSTOM_MIN_MSG = "Girilen izin süresi 2 saat veya 2 saatten az olamaz. Lütfen yöneticinizle görüşünüz veya Yarım Gün izin giriniz.";
 const WORK_START_MIN = 9 * 60;
 const WORK_END_MIN = 18 * 60;
 function timeToMin(t) {
@@ -100,6 +102,10 @@ function leaveDays(dayType, start, end, startTime, endTime) {
   return base;
 }
 const fmtDays = (n) => Number(n).toLocaleString("tr-TR", { maximumFractionDigits: 1 });
+// "Kendim gireceğim" tek günde süre 2 saat veya altıysa izin verilmez
+function customSpanTooShort(dayType, start, end, startTime, endTime) {
+  return dayType === "custom" && !!start && start === end && !!startTime && !!endTime && hoursBetween(startTime, endTime) <= CUSTOM_MIN_HOURS;
+}
 
 function formatDate(isoDate) {
   // Accepts "YYYY-MM-DD" (or a date-time string) and returns "GG.AA.YYYY"
@@ -705,6 +711,10 @@ function MainApp({ token, user, onLogout }) {
     e.preventDefault();
     setFormError("");
     setFormMsg("");
+    if (customSpanTooShort(form.durationType, form.start, form.end, form.startTime, form.endTime)) {
+      setFormError(CUSTOM_MIN_MSG);
+      return;
+    }
     const errs = validateForm();
     setFieldErrors(errs);
     if (Object.keys(errs).length > 0) {
@@ -823,6 +833,10 @@ function MainApp({ token, user, onLogout }) {
     e.preventDefault();
     setActionError("");
     setAdminMsg("");
+    if (customSpanTooShort(adminForm.durationType, adminForm.start, adminForm.end, adminForm.startTime, adminForm.endTime)) {
+      setActionError(CUSTOM_MIN_MSG);
+      return;
+    }
     const errs = validateAdminForm();
     setAdminErrors(errs);
     if (Object.keys(errs).length > 0) return;
@@ -1248,16 +1262,21 @@ function MainApp({ token, user, onLogout }) {
                 {form.durationType !== "full_day" && <span style={{ color: "var(--color-text-tertiary)" }}> ({DURATION_LABEL[form.durationType]})</span>}
               </p>
             )}
+            {customSpanTooShort(form.durationType, form.start, form.end, form.startTime, form.endTime) && (
+              <p style={{ fontSize: 13, color: "var(--color-text-danger)", marginBottom: 12, fontWeight: 500 }}>{CUSTOM_MIN_MSG}</p>
+            )}
             {formError && (
               <p style={{ fontSize: 13, color: "var(--color-text-danger)", marginBottom: 12 }}>{formError}</p>
             )}
             <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
               <button
                 type="submit"
-                disabled={submitting}
+                disabled={submitting || customSpanTooShort(form.durationType, form.start, form.end, form.startTime, form.endTime)}
                 style={{
                   display: "flex", alignItems: "center", gap: 6,
                   background: BRAND.primary, borderColor: BRAND.primary, color: "#fff",
+                  opacity: (submitting || customSpanTooShort(form.durationType, form.start, form.end, form.startTime, form.endTime)) ? 0.55 : 1,
+                  cursor: customSpanTooShort(form.durationType, form.start, form.end, form.startTime, form.endTime) ? "not-allowed" : "pointer",
                 }}
               >
                 <i className={`ti ${editingId ? "ti-check" : "ti-send"}`} style={{ fontSize: 16 }} aria-hidden="true"></i>
@@ -1524,7 +1543,13 @@ function MainApp({ token, user, onLogout }) {
               </p>
             )}
 
-            <button type="submit" className="ev-btn-primary" disabled={adminSubmitting}>
+            {customSpanTooShort(adminForm.durationType, adminForm.start, adminForm.end, adminForm.startTime, adminForm.endTime) && (
+              <p style={{ fontSize: 13, color: "var(--color-text-danger)", marginBottom: 14, fontWeight: 500 }}>{CUSTOM_MIN_MSG}</p>
+            )}
+
+            <button type="submit" className="ev-btn-primary"
+              disabled={adminSubmitting || customSpanTooShort(adminForm.durationType, adminForm.start, adminForm.end, adminForm.startTime, adminForm.endTime)}
+              style={customSpanTooShort(adminForm.durationType, adminForm.start, adminForm.end, adminForm.startTime, adminForm.endTime) ? { opacity: 0.55, cursor: "not-allowed" } : undefined}>
               <i className="ti ti-user-plus" style={{ fontSize: 15 }} aria-hidden="true"></i>
               {adminSubmitting ? "Kaydediliyor…" : "Kaydı oluştur (onaylı)"}
             </button>

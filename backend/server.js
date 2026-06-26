@@ -103,6 +103,8 @@ function hoursBetween(startTime, endTime) {
 //  custom   -> tek gün: (bitiş-başlangıç)/9; çok gün: başlangıç günü "başlangıç saati"nden,
 //              dönüş günü "bitiş saati"ne kadar (her biri en yakın 0,5), aradaki günler tam.
 const FULL_WORKDAY_HOURS = 9;
+const CUSTOM_MIN_HOURS = 2;
+const CUSTOM_MIN_MSG = "Girilen izin süresi 2 saat veya 2 saatten az olamaz. Lütfen yöneticinizle görüşünüz veya Yarım Gün izin giriniz.";
 const WORK_START_MIN = 9 * 60; // 09:00
 const WORK_END_MIN = 18 * 60; // 18:00
 const r05 = (n) => Math.round(n * 2) / 2;
@@ -435,6 +437,9 @@ app.post("/api/requests", requireAuth, async (req, res) => {
     if (dur === "custom" && (!f.startTime || !f.endTime)) {
       return res.status(400).json({ error: "Saat girişi için başlangıç ve bitiş saati zorunludur." });
     }
+    if (dur === "custom" && start === end && hoursBetween(f.startTime, f.endTime) <= CUSTOM_MIN_HOURS) {
+      return res.status(400).json({ error: CUSTOM_MIN_MSG });
+    }
 
     const days = computeDays(dur, start, end, f.startTime, f.endTime);
 
@@ -492,6 +497,9 @@ app.post("/api/admin/requests", requireAuth, requireAdmin, async (req, res) => {
     const f = resolveFormFields(req.body, dur);
     if (dur === "custom" && (!f.startTime || !f.endTime)) {
       return res.status(400).json({ error: "Saat girişi için başlangıç ve bitiş saati zorunludur." });
+    }
+    if (dur === "custom" && start === end && hoursBetween(f.startTime, f.endTime) <= CUSTOM_MIN_HOURS) {
+      return res.status(400).json({ error: CUSTOM_MIN_MSG });
     }
 
     const days = computeDays(dur, start, end, f.startTime, f.endTime);
@@ -558,6 +566,9 @@ app.put("/api/leave-requests/:id", requireAuth, async (req, res) => {
     const f = resolveFormFields(req.body, dur);
     if (dur === "custom" && (!f.startTime || !f.endTime)) {
       return res.status(400).json({ error: "Saat girişi için başlangıç ve bitiş saati zorunludur." });
+    }
+    if (dur === "custom" && start === end && hoursBetween(f.startTime, f.endTime) <= CUSTOM_MIN_HOURS) {
+      return res.status(400).json({ error: CUSTOM_MIN_MSG });
     }
 
     const days = computeDays(dur, start, end, f.startTime, f.endTime);
