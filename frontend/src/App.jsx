@@ -558,7 +558,7 @@ function MainApp({ token, user, onLogout }) {
   const [calMax, setCalMax] = useState(3);
   const [dayModal, setDayModal] = useState(null); // { day, entries } | null
   const [calPicker, setCalPicker] = useState(false); // ay/yıl seçici açık mı
-  const [pickerYear, setPickerYear] = useState(now.getFullYear());
+  const [pickerYear, setPickerYear] = useState(new Date().getFullYear());
   const calPickerRef = useRef(null);
   useEffect(() => {
     const calc = () => setCalMax(window.innerWidth < 700 ? 1 : window.innerWidth < 1100 ? 2 : 3);
