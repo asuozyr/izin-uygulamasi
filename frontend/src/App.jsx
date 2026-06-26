@@ -1590,25 +1590,25 @@ function MainApp({ token, user, onLogout }) {
           <div style={{ display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 12 }}>
             <div ref={calPickerRef} style={{ position: "relative", display: "flex", alignItems: "center", gap: 4 }}>
               <button onClick={goToPrevYear} title="Önceki yıl" aria-label="Önceki yıl"
-                style={{ width: 32, height: 32, display: "grid", placeItems: "center", padding: 0 }}>
-                <i className="ti ti-chevrons-left" style={{ fontSize: 16 }} aria-hidden="true"></i>
+                style={{ width: 34, height: 34, display: "grid", placeItems: "center", padding: 0, fontSize: 16, fontWeight: 600, lineHeight: 1 }}>
+                «
               </button>
               <button onClick={goToPrevMonth} title="Önceki ay" aria-label="Önceki ay"
-                style={{ width: 32, height: 32, display: "grid", placeItems: "center", padding: 0 }}>
-                <i className="ti ti-chevron-left" style={{ fontSize: 16 }} aria-hidden="true"></i>
+                style={{ width: 34, height: 34, display: "grid", placeItems: "center", padding: 0, fontSize: 18, fontWeight: 600, lineHeight: 1 }}>
+                ‹
               </button>
               <button onClick={openCalPicker} aria-haspopup="true" aria-expanded={calPicker}
                 style={{ minWidth: 150, fontSize: 14, fontWeight: 600, padding: "6px 12px", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
                 {MONTH_NAMES[calendarMonth - 1]} {calendarYear}
-                <i className="ti ti-chevron-down" style={{ fontSize: 14, opacity: 0.7 }} aria-hidden="true"></i>
+                <span style={{ fontSize: 11, opacity: 0.7 }} aria-hidden="true">▾</span>
               </button>
               <button onClick={goToNextMonth} title="Sonraki ay" aria-label="Sonraki ay"
-                style={{ width: 32, height: 32, display: "grid", placeItems: "center", padding: 0 }}>
-                <i className="ti ti-chevron-right" style={{ fontSize: 16 }} aria-hidden="true"></i>
+                style={{ width: 34, height: 34, display: "grid", placeItems: "center", padding: 0, fontSize: 18, fontWeight: 600, lineHeight: 1 }}>
+                ›
               </button>
               <button onClick={goToNextYear} title="Sonraki yıl" aria-label="Sonraki yıl"
-                style={{ width: 32, height: 32, display: "grid", placeItems: "center", padding: 0 }}>
-                <i className="ti ti-chevrons-right" style={{ fontSize: 16 }} aria-hidden="true"></i>
+                style={{ width: 34, height: 34, display: "grid", placeItems: "center", padding: 0, fontSize: 16, fontWeight: 600, lineHeight: 1 }}>
+                »
               </button>
 
               {calPicker && (
@@ -1620,13 +1620,13 @@ function MainApp({ token, user, onLogout }) {
                   }}>
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
                     <button onClick={() => setPickerYear((y) => y - 1)} aria-label="Önceki yıl"
-                      style={{ width: 30, height: 30, display: "grid", placeItems: "center", padding: 0 }}>
-                      <i className="ti ti-chevron-left" style={{ fontSize: 15 }} aria-hidden="true"></i>
+                      style={{ width: 30, height: 30, display: "grid", placeItems: "center", padding: 0, fontSize: 17, fontWeight: 600, lineHeight: 1 }}>
+                      ‹
                     </button>
                     <span style={{ fontSize: 15, fontWeight: 600 }}>{pickerYear}</span>
                     <button onClick={() => setPickerYear((y) => y + 1)} aria-label="Sonraki yıl"
-                      style={{ width: 30, height: 30, display: "grid", placeItems: "center", padding: 0 }}>
-                      <i className="ti ti-chevron-right" style={{ fontSize: 15 }} aria-hidden="true"></i>
+                      style={{ width: 30, height: 30, display: "grid", placeItems: "center", padding: 0, fontSize: 17, fontWeight: 600, lineHeight: 1 }}>
+                      ›
                     </button>
                   </div>
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6 }}>
