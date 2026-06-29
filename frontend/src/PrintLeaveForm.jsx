@@ -162,12 +162,7 @@ export default function PrintLeaveForm({ id }) {
         <div className="pf-section-lbl">İzin Sebebi / Açıklama</div>
         <div className="pf-box pf-box-tall">{req.reason || ""}</div>
 
-        {/* Beyan */}
-        <p className="pf-decl">
-          Yukarıda belirttiğim tarihler arasında izin kullanmak istiyorum. Verdiğim bilgilerin doğru olduğunu
-          beyan ederim. İzin dönüşü göreve zamanında başlayacağımı taahhüt ederim.
-        </p>
-
+  
         {/* İmza alanları kaldırıldı */}
 
         {/* İzin dönüşü kullanım beyanı */}
