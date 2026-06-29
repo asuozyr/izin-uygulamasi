@@ -68,6 +68,15 @@ export default function PrintLeaveForm({ id }) {
     );
   }
 
+  if (req && req.status !== "onaylandi") {
+    return (
+      <div style={{ fontFamily: "system-ui, sans-serif", padding: 40, textAlign: "center", color: "#444" }}>
+        <p>Bu form yalnızca <strong>onaylanan</strong> izinler için oluşturulabilir.</p>
+        <button onClick={() => window.close()} style={{ marginTop: 12 }}>Kapat</button>
+      </div>
+    );
+  }
+
   const timeRange =
     req.startTime || req.endTime ? `${req.startTime || "—"} – ${req.endTime || "—"}` : "—";
 
@@ -85,7 +94,7 @@ export default function PrintLeaveForm({ id }) {
         <header className="pf-head">
           <img src={logo} alt="SmartAlpha" className="pf-logo" />
           <div className="pf-title-wrap">
-            <h1 className="pf-title">İzin Talep ve Beyan Formu</h1>
+            <h1 className="pf-title">İzin Kullanma Formu</h1>
             <div className="pf-sub">SmartAlpha</div>
           </div>
           <div className="pf-recno">
@@ -105,9 +114,7 @@ export default function PrintLeaveForm({ id }) {
             </tr>
             <tr>
               <th className="pf-th">Talep Tarihi</th>
-              <td className="pf-td">{formatDate(req.createdAt)}</td>
-              <th className="pf-th">Durum</th>
-              <td className="pf-td">{statusLabel(req.status)}</td>
+              <td className="pf-td" colSpan={3}>{formatDate(req.createdAt)}</td>
             </tr>
           </tbody>
         </table>
@@ -167,7 +174,7 @@ export default function PrintLeaveForm({ id }) {
         <table className="pf-table pf-sign">
           <tbody>
             <tr>
-              <th className="pf-th">Talep Eden (Çalışan)</th>
+              <th className="pf-th">Çalışan</th>
               <th className="pf-th">Onaylayan (Yönetici)</th>
             </tr>
             <tr>
@@ -197,7 +204,7 @@ export default function PrintLeaveForm({ id }) {
           </div>
         </div>
 
-        <footer className="pf-foot">SmartAlpha — İzin Talep ve Beyan Formu · Kayıt No #{req.id}</footer>
+        <footer className="pf-foot">SmartAlpha — İzin Kullanma Formu · Kayıt No #{req.id}</footer>
       </div>
     </div>
   );
