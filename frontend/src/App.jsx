@@ -1184,7 +1184,7 @@ function MainApp({ token, user, onLogout }) {
                 </>
               )}
               <div>
-                <label style={{ fontSize: 13, color: "var(--color-text-secondary)", display: "block", marginBottom: 4 }}>Ulaşılabilecek telefon</label>
+                <label style={{ fontSize: 13, color: "var(--color-text-secondary)", display: "block", marginBottom: 4 }}>Acil durumlarda ulaşılabilecek telefon</label>
                 <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, marginBottom: 6, cursor: "pointer" }}>
                   <input type="checkbox" checked={form.useExistingPhone} onChange={(e) => updateField("useExistingPhone", e.target.checked)} />
                   Mevcut cep telefonum
@@ -1490,7 +1490,7 @@ function MainApp({ token, user, onLogout }) {
                 </>
               )}
               <div>
-                <label style={{ fontSize: 13, color: "var(--color-text-secondary)", display: "block", marginBottom: 4 }}>Ulaşılabilecek telefon <span style={{ color: "var(--color-text-tertiary)" }}>(opsiyonel)</span></label>
+                <label style={{ fontSize: 13, color: "var(--color-text-secondary)", display: "block", marginBottom: 4 }}>Acil durumlarda ulaşılabilecek telefon <span style={{ color: "var(--color-text-tertiary)" }}>(opsiyonel)</span></label>
                 <div style={{ display: "flex", gap: 6 }}>
                   <input type="text" list="ulke-kodlari-admin" value={adminForm.countryCode} onChange={(e) => updateAdminField("countryCode", e.target.value)} aria-label="Ülke kodu"
                     style={{ width: 78, flexShrink: 0, fontFamily: "inherit", fontSize: 14, padding: "6px 8px", borderRadius: "var(--border-radius-md)", border: `1px solid ${adminErrors.contactPhone ? ERR_COLOR : "var(--color-border-secondary)"}`, boxSizing: "border-box" }} />

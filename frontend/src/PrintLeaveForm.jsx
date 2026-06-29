@@ -152,7 +152,7 @@ export default function PrintLeaveForm({ id }) {
               <td className="pf-td"><strong>{fmtDays(req.days)} gün</strong></td>
             </tr>
             <tr>
-              <th className="pf-th">Ulaşılabilecek Telefon</th>
+              <th className="pf-th">Acil durumlarda ulaşılabilecek telefon</th>
               <td className="pf-td" colSpan={3}>{req.contactPhone || ""}</td>
             </tr>
           </tbody>
