@@ -163,9 +163,7 @@ function RequestExtra({ r }) {
   const bits = [];
   if (r.durationType && r.durationType !== "full_day") bits.push(r.durationType === "half_day" ? "Yarım gün" : "Saatli");
   if (r.startTime || r.endTime) bits.push(`Saat: ${r.startTime || "?"}–${r.endTime || "?"}`);
-  if (r.returnDate) bits.push(`İşe dönüş: ${formatDate(r.returnDate)}`);
-  if (r.location) bits.push(`Yer: ${r.location}`);
-  if (r.contactPhone) bits.push(`Tel: ${r.contactPhone}`);
+  if (r.returnDate) bits.push(`İşe dönüş: ${formatDate(r.returnDate)}`);  if (r.contactPhone) bits.push(`Tel: ${r.contactPhone}`);
   if (bits.length === 0) return null;
   return (
     <div style={{ width: "100%", marginTop: 2, fontSize: 12.5, color: "var(--color-text-secondary)", display: "flex", flexWrap: "wrap", gap: 12 }}>
@@ -697,9 +695,6 @@ function MainApp({ token, user, onLogout }) {
         errs.endTime = "Tek günde bitiş saati başlangıçtan sonra olmalı.";
       }
     }
-    if (!form.useResidenceCity && (!form.location || !form.location.trim())) {
-      errs.location = "Bu alan zorunlu.";
-    }
     if (!form.useExistingPhone) {
       const pErr = phoneError(form.countryCode, form.contactPhone);
       if (pErr) errs.contactPhone = pErr;
@@ -730,9 +725,9 @@ function MainApp({ token, user, onLogout }) {
       startTime: form.durationType === "custom" ? form.startTime : "",
       endTime: form.durationType === "custom" ? form.endTime : "",
       returnDate: form.returnDate,
-      useResidenceCity: form.useResidenceCity,
+      useResidenceCity: false,
       useExistingPhone: form.useExistingPhone,
-      location: form.useResidenceCity ? "" : form.location.trim(),
+      location: "",
       contactPhone: form.useExistingPhone ? "" : `${form.countryCode} ${form.contactPhone}`.trim(),
       reason: form.reason,
     };
@@ -851,7 +846,7 @@ function MainApp({ token, user, onLogout }) {
         returnDate: adminForm.returnDate,
         startTime: adminForm.durationType === "custom" ? adminForm.startTime : "",
         endTime: adminForm.durationType === "custom" ? adminForm.endTime : "",
-        location: adminForm.location.trim(),
+        location: "",
         contactPhone: adminForm.contactPhone.trim() ? `${adminForm.countryCode} ${adminForm.contactPhone}`.trim() : "",
         reason: adminForm.reason,
       });
@@ -1189,23 +1184,6 @@ function MainApp({ token, user, onLogout }) {
                 </>
               )}
               <div>
-                <label style={{ fontSize: 13, color: "var(--color-text-secondary)", display: "block", marginBottom: 4 }}>İzin geçirilecek yer</label>
-                <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, marginBottom: 6, cursor: "pointer" }}>
-                  <input type="checkbox" checked={form.useResidenceCity} onChange={(e) => updateField("useResidenceCity", e.target.checked)} />
-                  İkamet şehrim
-                </label>
-                {form.useResidenceCity ? (
-                  <p style={{ fontSize: 12.5, color: "var(--color-text-tertiary)", margin: 0 }}>İkamet şehriniz kullanılacak.</p>
-                ) : (
-                  <>
-                    <input type="text" value={form.location} onChange={(e) => updateField("location", e.target.value)}
-                      placeholder="Örn. İzmir, memleket"
-                      style={{ width: "100%", fontFamily: "inherit", fontSize: 14, padding: "6px 10px", borderRadius: "var(--border-radius-md)", border: `1px solid ${fieldErrors.location ? ERR_COLOR : "var(--color-border-secondary)"}`, boxSizing: "border-box" }} />
-                    {fieldErrors.location && <p style={{ color: ERR_COLOR, fontSize: 12, margin: "4px 0 0" }}>{fieldErrors.location}</p>}
-                  </>
-                )}
-              </div>
-              <div>
                 <label style={{ fontSize: 13, color: "var(--color-text-secondary)", display: "block", marginBottom: 4 }}>Ulaşılabilecek telefon</label>
                 <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, marginBottom: 6, cursor: "pointer" }}>
                   <input type="checkbox" checked={form.useExistingPhone} onChange={(e) => updateField("useExistingPhone", e.target.checked)} />
@@ -1511,11 +1489,6 @@ function MainApp({ token, user, onLogout }) {
                   </div>
                 </>
               )}
-              <div>
-                <label style={{ fontSize: 13, color: "var(--color-text-secondary)", display: "block", marginBottom: 4 }}>İzin geçirilecek yer <span style={{ color: "var(--color-text-tertiary)" }}>(opsiyonel)</span></label>
-                <input type="text" value={adminForm.location} onChange={(e) => updateAdminField("location", e.target.value)} placeholder="Örn. İzmir"
-                  style={{ width: "100%", fontFamily: "inherit", fontSize: 14, padding: "6px 10px", borderRadius: "var(--border-radius-md)", border: "1px solid var(--color-border-secondary)", boxSizing: "border-box" }} />
-              </div>
               <div>
                 <label style={{ fontSize: 13, color: "var(--color-text-secondary)", display: "block", marginBottom: 4 }}>Ulaşılabilecek telefon <span style={{ color: "var(--color-text-tertiary)" }}>(opsiyonel)</span></label>
                 <div style={{ display: "flex", gap: 6 }}>

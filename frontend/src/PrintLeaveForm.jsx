@@ -95,7 +95,7 @@ export default function PrintLeaveForm({ id }) {
           <img src={logo} alt="SmartAlpha" className="pf-logo" />
           <div className="pf-title-wrap">
             <h1 className="pf-title">İzin Kullanma Formu</h1>
-            <div className="pf-sub">SmartAlpha</div>
+            <div className="pf-sub">Smart Alfa Teknoloji San. ve Tic. A.Ş.</div>
           </div>
           <div className="pf-recno">
             <div className="pf-recno-lbl">Kayıt No</div>
@@ -152,10 +152,8 @@ export default function PrintLeaveForm({ id }) {
               <td className="pf-td"><strong>{fmtDays(req.days)} gün</strong></td>
             </tr>
             <tr>
-              <th className="pf-th">İzin Geçirilecek Yer / Adres</th>
-              <td className="pf-td">{req.location || ""}</td>
               <th className="pf-th">Ulaşılabilecek Telefon</th>
-              <td className="pf-td">{req.contactPhone || ""}</td>
+              <td className="pf-td" colSpan={3}>{req.contactPhone || ""}</td>
             </tr>
           </tbody>
         </table>
@@ -170,27 +168,7 @@ export default function PrintLeaveForm({ id }) {
           beyan ederim. İzin dönüşü göreve zamanında başlayacağımı taahhüt ederim.
         </p>
 
-        {/* İmza alanları */}
-        <table className="pf-table pf-sign">
-          <tbody>
-            <tr>
-              <th className="pf-th">Çalışan</th>
-              <th className="pf-th">Onaylayan (Yönetici)</th>
-            </tr>
-            <tr>
-              <td className="pf-td pf-sign-cell">
-                <div className="pf-sign-line">Ad Soyad: {req.employeeName || ""}</div>
-                <div className="pf-sign-line">Tarih: ............................</div>
-                <div className="pf-sign-line pf-sign-imza">İmza:</div>
-              </td>
-              <td className="pf-td pf-sign-cell">
-                <div className="pf-sign-line">Ad Soyad: ............................</div>
-                <div className="pf-sign-line">Tarih: ............................</div>
-                <div className="pf-sign-line pf-sign-imza">İmza / Onay:</div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+        {/* İmza alanları kaldırıldı */}
 
         {/* İzin dönüşü kullanım beyanı */}
         <div className="pf-section-lbl">İzin Dönüşü Kullanım Beyanı</div>
