@@ -1,0 +1,19 @@
+# Cloud Build: imajı VITE_GOOGLE_CLIENT_ID build-arg'ı ile derler ve Artifact Registry'ye gönderir.
+# Kullanım:
+#   gcloud builds submit --config cloudbuild.yaml \
+#     --substitutions _IMAGE=REGION-docker.pkg.dev/PROJE/REPO/izin:latest,_VITE_GOOGLE_CLIENT_ID=...apps.googleusercontent.com
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - --build-arg
+      - VITE_GOOGLE_CLIENT_ID=${_VITE_GOOGLE_CLIENT_ID}
+      - -t
+      - ${_IMAGE}
+      - .
+  - name: gcr.io/cloud-builders/docker
+    args: [push, "${_IMAGE}"]
+images:
+  - ${_IMAGE}
+options:
+  logging: CLOUD_LOGGING_ONLY

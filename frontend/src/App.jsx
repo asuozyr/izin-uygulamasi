@@ -116,6 +116,32 @@ function businessDaysBetween(start, end) {
   }
   return count;
 }
+function boundaryDayFraction(hours) {
+  if (hours <= 0) return 0;
+  return hours < 4 ? 0.5 : 1;
+}
+// Çok günlük saatli izin: ilk gün (başlangıç→18:00), son gün (09:00→bitiş), aradakiler tam gün.
+function customMultiDayValue(start, end, startTime, endTime) {
+  const first = parseYmd(start);
+  const last = parseYmd(end);
+  if (!first || !last || last <= first) return 0;
+  const sm = timeToMin(startTime);
+  const em = timeToMin(endTime);
+  const firstHours = sm == null ? FULL_WORKDAY_HOURS
+    : (WORK_END_MIN - Math.min(Math.max(sm, WORK_START_MIN), WORK_END_MIN)) / 60;
+  const lastHours = em == null ? FULL_WORKDAY_HOURS
+    : (Math.max(Math.min(em, WORK_END_MIN), WORK_START_MIN) - WORK_START_MIN) / 60;
+  let total = 0;
+  if (isBusinessDay(first)) total += boundaryDayFraction(firstHours);
+  if (isBusinessDay(last)) total += boundaryDayFraction(lastHours);
+  const cur = new Date(first.getFullYear(), first.getMonth(), first.getDate() + 1);
+  const stop = new Date(last.getFullYear(), last.getMonth(), last.getDate() - 1);
+  while (cur <= stop) {
+    if (isBusinessDay(cur)) total += 1;
+    cur.setDate(cur.getDate() + 1);
+  }
+  return total;
+}
 const r05 = (n) => Math.round(n * 2) / 2;
 const clamp01 = (n) => Math.min(1, Math.max(0, n));
 function leaveDays(dayType, start, end, startTime, endTime) {
@@ -128,8 +154,8 @@ function leaveDays(dayType, start, end, startTime, endTime) {
       if (h < CUSTOM_MIN_HOURS) return 0;
       return h < 4 ? 0.5 : 1;
     }
-    // Çok günlük: iş günü bazlı tam gün (hafta sonu/tatil hariç).
-    return businessDaysBetween(start, end);
+    // Çok günlük: ilk/son gün saatlere göre, aradakiler tam gün.
+    return customMultiDayValue(start, end, startTime, endTime);
   }
   // full_day: yalnızca iş günleri (Pzt–Cuma).
   return businessDaysBetween(start, end);
@@ -264,6 +290,9 @@ const api = {
   updateRequestStatus: (token, id, status) =>
     apiRequest(`/api/requests/${id}`, { method: "PATCH", body: JSON.stringify({ status }) }, token),
   getCalendar: (token, year, month) => apiRequest(`/api/calendar?year=${year}&month=${month}`, {}, token),
+  getNotifications: (token) => apiRequest("/api/notifications", {}, token),
+  markNotifRead: (token, id) => apiRequest(`/api/notifications/${id}/read`, { method: "PATCH" }, token),
+  markAllNotifRead: (token) => apiRequest("/api/notifications/read-all", { method: "POST" }, token),
 };
 
 // =======================================================================
@@ -673,6 +702,48 @@ function MainApp({ token, user, onLogout }) {
   const [emailEditId, setEmailEditId] = useState(null);
   // "Tüm talepler" canlı arama (çalışan adına göre)
   const [tumSearch, setTumSearch] = useState("");
+
+  // Bildirimler
+  const [notifs, setNotifs] = useState([]);
+  const [notifUnread, setNotifUnread] = useState(0);
+  const [notifOpen, setNotifOpen] = useState(false);
+  const notifRef = useRef(null);
+  const loadNotifs = useCallback(() => {
+    if (!token) return;
+    api.getNotifications(token).then((d) => {
+      setNotifs(d.items || []);
+      setNotifUnread(d.unread || 0);
+    }).catch(() => {});
+  }, [token]);
+  useEffect(() => {
+    loadNotifs();
+    const t = setInterval(loadNotifs, 45000);
+    return () => clearInterval(t);
+  }, [loadNotifs]);
+  // dışarı tıkla / ESC ile kapat
+  useEffect(() => {
+    if (!notifOpen) return;
+    const onDoc = (e) => { if (notifRef.current && !notifRef.current.contains(e.target)) setNotifOpen(false); };
+    const onKey = (e) => { if (e.key === "Escape") setNotifOpen(false); };
+    document.addEventListener("mousedown", onDoc);
+    document.addEventListener("keydown", onKey);
+    return () => { document.removeEventListener("mousedown", onDoc); document.removeEventListener("keydown", onKey); };
+  }, [notifOpen]);
+  async function openNotifPanel() {
+    const willOpen = !notifOpen;
+    setNotifOpen(willOpen);
+    if (willOpen && notifUnread > 0) {
+      try { await api.markAllNotifRead(token); setNotifUnread(0); setNotifs((xs) => xs.map((n) => ({ ...n, read: true }))); } catch {}
+    }
+  }
+  function notifTimeText(iso) {
+    const d = new Date(iso); const now = new Date();
+    const diff = Math.floor((now - d) / 60000);
+    if (diff < 1) return "az önce";
+    if (diff < 60) return `${diff} dk önce`;
+    if (diff < 1440) return `${Math.floor(diff / 60)} sa önce`;
+    return d.toLocaleDateString("tr-TR", { day: "2-digit", month: "2-digit", year: "numeric" });
+  }
   const [emailEditVal, setEmailEditVal] = useState("");
   const [emailEditErr, setEmailEditErr] = useState("");
   const [emailSaving, setEmailSaving] = useState(false);
@@ -1069,12 +1140,49 @@ function MainApp({ token, user, onLogout }) {
             <h1 className="ev-h1">{pageTitle}</h1>
             <p className="ev-sub">{pageSub}</p>
           </div>
-          {isAdmin && (
-            <button className="ev-btn-ghost" onClick={togglePreview}>
-              <i className={`ti ${previewEmployee ? "ti-arrow-back-up" : "ti-eye"}`} aria-hidden="true"></i>
-              {previewEmployee ? "Yönetici görünümüne geç" : "Çalışan görünümüne geç"}
-            </button>
-          )}
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <div ref={notifRef} style={{ position: "relative" }}>
+              <button
+                onClick={openNotifPanel}
+                aria-label="Bildirimler"
+                title="Bildirimler"
+                style={{ position: "relative", width: 40, height: 40, display: "grid", placeItems: "center", padding: 0, borderRadius: "var(--border-radius-lg)", background: "var(--color-background-primary)", border: "1px solid var(--color-border-secondary)", cursor: "pointer", fontSize: 18 }}
+              >
+                <span aria-hidden="true">🔔</span>
+                {notifUnread > 0 && (
+                  <span style={{ position: "absolute", top: -5, right: -5, minWidth: 18, height: 18, padding: "0 5px", borderRadius: 999, background: "#e24b4a", color: "#fff", fontSize: 11, fontWeight: 700, display: "grid", placeItems: "center", boxSizing: "border-box" }}>
+                    {notifUnread > 99 ? "99+" : notifUnread}
+                  </span>
+                )}
+              </button>
+              {notifOpen && (
+                <div style={{ position: "absolute", right: 0, top: 48, width: 360, maxWidth: "calc(100vw - 32px)", maxHeight: 460, overflowY: "auto", background: "var(--color-background-primary)", border: "1px solid var(--color-border-secondary)", borderRadius: "var(--border-radius-lg)", boxShadow: "0 12px 32px rgba(0,0,0,.16)", zIndex: 50 }}>
+                  <div style={{ padding: "12px 16px", borderBottom: "1px solid var(--color-border-tertiary)", fontWeight: 600, fontSize: 14, position: "sticky", top: 0, background: "var(--color-background-primary)" }}>
+                    Bildirimler
+                  </div>
+                  {notifs.length === 0 ? (
+                    <div style={{ padding: "22px 16px", fontSize: 13, color: "var(--color-text-tertiary)", textAlign: "center" }}>Henüz bildirim yok.</div>
+                  ) : (
+                    notifs.map((n) => (
+                      <div key={n.id} style={{ padding: "11px 16px", borderBottom: "1px solid var(--color-border-tertiary)", background: n.read ? "transparent" : "var(--accent-bg)" }}>
+                        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8 }}>
+                          <span style={{ fontSize: 13.5, fontWeight: 600 }}>{n.title}</span>
+                          <span style={{ fontSize: 11, color: "var(--color-text-tertiary)", whiteSpace: "nowrap" }}>{notifTimeText(n.createdAt)}</span>
+                        </div>
+                        {n.body && <div style={{ fontSize: 12.5, color: "var(--color-text-secondary)", marginTop: 3 }}>{n.body}</div>}
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
+            {isAdmin && (
+              <button className="ev-btn-ghost" onClick={togglePreview}>
+                <i className={`ti ${previewEmployee ? "ti-arrow-back-up" : "ti-eye"}`} aria-hidden="true"></i>
+                {previewEmployee ? "Yönetici görünümüne geç" : "Çalışan görünümüne geç"}
+              </button>
+            )}
+          </div>
         </div>
 
         {previewEmployee && (

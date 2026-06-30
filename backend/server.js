@@ -20,6 +20,7 @@ const fs = require("fs");
 const jwt = require("jsonwebtoken");
 const { Pool } = require("pg");
 const { OAuth2Client } = require("google-auth-library");
+const nodemailer = require("nodemailer");
 
 const app = express();
 app.use(express.json());
@@ -38,6 +39,148 @@ const ADMIN_EMAILS = new Set(
 
 if (!GOOGLE_CLIENT_ID) {
   console.warn("UYARI: GOOGLE_CLIENT_ID tanımlı değil. backend/.env dosyasını kontrol edin.");
+}
+
+// ---------------------------------------------------------------------
+// E-posta (SMTP) — opsiyonel. Env tanımlıysa gönderir, değilse sessizce atlar.
+//   SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, MAIL_FROM, APP_URL
+// ---------------------------------------------------------------------
+const MAIL_FROM = process.env.MAIL_FROM || process.env.SMTP_USER || "SmartAlpha İzin <noreply@smartalpha.dev>";
+const APP_URL = process.env.APP_URL || "https://leaves.smartalpha.dev";
+let mailTransport = null;
+if (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS) {
+  mailTransport = nodemailer.createTransport({
+    host: process.env.SMTP_HOST,
+    port: parseInt(process.env.SMTP_PORT || "465", 10),
+    secure: parseInt(process.env.SMTP_PORT || "465", 10) === 465,
+    auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
+  });
+  console.log("E-posta gönderimi etkin (SMTP yapılandırıldı).");
+} else {
+  console.log("E-posta gönderimi devre dışı (SMTP env yok). Uygulama içi bildirimler çalışır.");
+}
+async function sendMail(to, subject, html) {
+  if (!mailTransport || !to) return;
+  try {
+    await mailTransport.sendMail({ from: MAIL_FROM, to, subject, html });
+  } catch (err) {
+    console.error("E-posta gönderilemedi:", err.message);
+  }
+}
+
+// Marka kimliğine uygun HTML e-posta şablonu
+const BRAND_PURPLE = "#6F03B5";
+function leaveEmailHtml({ heading, statusLabel, statusColor, employeeName, typeLabel, dateRange, daysText, reason, note }) {
+  const row = (k, v) => v
+    ? `<tr><td style="padding:6px 0;color:#6b7280;font-size:13px;width:140px">${k}</td><td style="padding:6px 0;color:#111827;font-size:14px;font-weight:500">${v}</td></tr>`
+    : "";
+  return `<!doctype html><html><body style="margin:0;background:#f4f4f7;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif">
+  <div style="max-width:560px;margin:0 auto;padding:24px">
+    <div style="text-align:center;padding:8px 0 16px">
+      <span style="font-size:26px;font-weight:800;color:#111827;letter-spacing:-.5px">Smart<span style="color:${BRAND_PURPLE};font-style:italic">α</span></span>
+    </div>
+    <div style="background:#fff;border-radius:14px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.08)">
+      <div style="background:${BRAND_PURPLE};padding:18px 24px">
+        <div style="color:#fff;font-size:17px;font-weight:600">${heading}</div>
+      </div>
+      <div style="padding:22px 24px">
+        ${statusLabel ? `<div style="display:inline-block;padding:4px 12px;border-radius:999px;background:${statusColor}1a;color:${statusColor};font-size:13px;font-weight:600;margin-bottom:14px">${statusLabel}</div>` : ""}
+        <table style="width:100%;border-collapse:collapse">
+          ${row("Çalışan", employeeName)}
+          ${row("İzin türü", typeLabel)}
+          ${row("Tarih aralığı", dateRange)}
+          ${row("Toplam", daysText)}
+          ${row("Açıklama", reason)}
+        </table>
+        ${note ? `<p style="margin:16px 0 0;color:#374151;font-size:14px;line-height:1.5">${note}</p>` : ""}
+        <div style="margin-top:22px">
+          <a href="${APP_URL}" style="display:inline-block;background:${BRAND_PURPLE};color:#fff;text-decoration:none;font-size:14px;font-weight:600;padding:10px 20px;border-radius:8px">Uygulamayı aç</a>
+        </div>
+      </div>
+    </div>
+    <p style="text-align:center;color:#9ca3af;font-size:12px;margin:16px 0 0">Smart Alfa Teknoloji San. ve Tic. A.Ş. — İzin Yönetim Sistemi</p>
+  </div></body></html>`;
+}
+
+// Etiketler
+const TYPE_LABELS = { yillik: "Yıllık izin", mazeret: "Mazeret izni", hastalik: "Hastalık izni", ucretsiz: "Ücretsiz izin" };
+const STATUS_META = {
+  beklemede: { label: "Beklemede", color: "#b45309" },
+  onaylandi: { label: "Onaylandı", color: "#15803d" },
+  reddedildi: { label: "Reddedildi", color: "#b91c1c" },
+  iptal: { label: "İptal edildi", color: "#6b7280" },
+};
+function fmtTR(d) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(d || ""));
+  return m ? `${m[3]}.${m[2]}.${m[1]}` : String(d || "");
+}
+function dateRangeText(start, end) {
+  return start === end ? fmtTR(start) : `${fmtTR(start)} – ${fmtTR(end)}`;
+}
+
+// Bildirim oluştur (uygulama içi) + ilgili kullanıcıya e-posta (varsa). Yanıtı bloklamaz.
+async function createNotification({ userId, type, title, body, requestId, email, emailSubject, emailHtml }) {
+  try {
+    await pool.query(
+      "INSERT INTO notifications (user_id, type, title, body, request_id) VALUES ($1,$2,$3,$4,$5)",
+      [userId, type, title, body || null, requestId || null]
+    );
+  } catch (err) {
+    console.error("Bildirim oluşturulamadı:", err.message);
+  }
+  if (email && emailSubject && emailHtml) {
+    sendMail(email, emailSubject, emailHtml); // await yok: yanıtı geciktirmesin
+  }
+}
+
+// Olay yardımcıları --------------------------------------------------
+async function notifyManagersNewRequest(r) {
+  const { rows: emp } = await pool.query("SELECT name FROM employees WHERE id=$1", [r.userId]);
+  const empName = emp[0]?.name || "Çalışan";
+  const { rows: mgrs } = await pool.query("SELECT id, email FROM employees WHERE role='yonetici'");
+  const typeLabel = TYPE_LABELS[r.type] || r.type;
+  const range = dateRangeText(r.start, r.end);
+  const daysText = `${r.days} gün`;
+  const html = leaveEmailHtml({
+    heading: "Yeni izin talebi", statusLabel: "Beklemede", statusColor: STATUS_META.beklemede.color,
+    employeeName: empName, typeLabel, dateRange: range, daysText, reason: r.reason,
+    note: `${empName} yeni bir izin talebi oluşturdu ve onayınızı bekliyor.`,
+  });
+  for (const m of mgrs) {
+    if (m.id === r.userId) continue; // kendi talebi olan yönetici için atla
+    await createNotification({
+      userId: m.id, type: "request_created", title: "Yeni izin talebi",
+      body: `${empName} • ${typeLabel} • ${range} (${daysText})`, requestId: r.id,
+      email: m.email, emailSubject: `Yeni izin talebi — ${empName}`, emailHtml: html,
+    });
+  }
+}
+async function notifyEmployeeStatus(r, kind) {
+  // kind: 'admin_created' | 'request_approved' | 'request_rejected' | 'admin_updated' | 'admin_cancelled'
+  const { rows: emp } = await pool.query("SELECT name, email FROM employees WHERE id=$1", [r.userId]);
+  if (!emp.length) return;
+  const empName = emp[0].name, email = emp[0].email;
+  const typeLabel = TYPE_LABELS[r.type] || r.type;
+  const range = dateRangeText(r.start, r.end);
+  const daysText = `${r.days} gün`;
+  const MAP = {
+    admin_created:    { title: "Adınıza izin kaydı oluşturuldu", st: "onaylandi", note: "Yöneticiniz adınıza bir izin kaydı oluşturdu." },
+    request_approved: { title: "İzin talebiniz onaylandı",        st: "onaylandi", note: "İzin talebiniz yöneticiniz tarafından onaylandı." },
+    request_rejected: { title: "İzin talebiniz reddedildi",        st: "reddedildi", note: "İzin talebiniz yöneticiniz tarafından reddedildi." },
+    admin_updated:    { title: "İzin kaydınız güncellendi",        st: r.status, note: "Yöneticiniz izin kaydınızı güncelledi." },
+    admin_cancelled:  { title: "İzin kaydınız iptal edildi",       st: "iptal", note: "Yöneticiniz izin kaydınızı iptal etti." },
+  };
+  const meta = MAP[kind];
+  const sm = STATUS_META[meta.st] || STATUS_META.beklemede;
+  const html = leaveEmailHtml({
+    heading: meta.title, statusLabel: sm.label, statusColor: sm.color,
+    employeeName: empName, typeLabel, dateRange: range, daysText, reason: r.reason, note: meta.note,
+  });
+  await createNotification({
+    userId: r.userId, type: kind, title: meta.title,
+    body: `${typeLabel} • ${range} (${daysText})`, requestId: r.id,
+    email, emailSubject: meta.title, emailHtml: html,
+  });
 }
 
 // ---------------------------------------------------------------------
@@ -134,6 +277,39 @@ function businessDaysBetween(start, end) {
   }
   return count;
 }
+// Sınır gün kesri: çalışılmayan süre 0; 0–4 saat arası 0,5; 4 saat ve üzeri 1 tam gün.
+function boundaryDayFraction(hours) {
+  if (hours <= 0) return 0;
+  return hours < 4 ? 0.5 : 1;
+}
+// Çok günlük "kendim gireceğim" (saatli) izin:
+//  - ilk gün: başlangıç saatinden mesai bitimine (18:00) kadar
+//  - son gün: mesai başlangıcından (09:00) bitiş/dönüş saatine kadar
+//  - aradaki tam günler: her biri 1
+//  - hafta sonu ve resmi tatiller hiçbir konumda sayılmaz
+function customMultiDayValue(start, end, startTime, endTime) {
+  const first = parseYmd(start);
+  const last = parseYmd(end);
+  if (!first || !last || last <= first) return 0;
+  const sm = timeToMin(startTime);
+  const em = timeToMin(endTime);
+  const firstHours = sm == null ? FULL_WORKDAY_HOURS
+    : (WORK_END_MIN - Math.min(Math.max(sm, WORK_START_MIN), WORK_END_MIN)) / 60;
+  const lastHours = em == null ? FULL_WORKDAY_HOURS
+    : (Math.max(Math.min(em, WORK_END_MIN), WORK_START_MIN) - WORK_START_MIN) / 60;
+
+  let total = 0;
+  if (isBusinessDay(first)) total += boundaryDayFraction(firstHours);
+  if (isBusinessDay(last)) total += boundaryDayFraction(lastHours);
+  // Aradaki günler (ilk+1 .. son-1)
+  const cur = new Date(first.getFullYear(), first.getMonth(), first.getDate() + 1);
+  const stop = new Date(last.getFullYear(), last.getMonth(), last.getDate() - 1);
+  while (cur <= stop) {
+    if (isBusinessDay(cur)) total += 1;
+    cur.setDate(cur.getDate() + 1);
+  }
+  return total;
+}
 // Gün tipine göre toplam izin günü:
 //  full_day -> aralıktaki her gün 1
 //  half_day -> her gün 0,5
@@ -155,8 +331,8 @@ function computeDays(dayType, start, end, startTime, endTime) {
       if (h < CUSTOM_MIN_HOURS) return 0;
       return h < 4 ? 0.5 : 1;
     }
-    // Çok günlük "kendim gireceğim": iş günü bazlı tam gün say (hafta sonu/tatil hariç).
-    return businessDaysBetween(start, end);
+    // Çok günlük "kendim gireceğim": ilk/son gün saatlere göre, aradakiler tam gün.
+    return customMultiDayValue(start, end, startTime, endTime);
   }
   // full_day: yalnızca iş günleri (Pzt–Cuma), hafta sonu ve resmi tatiller düşülür.
   return businessDaysBetween(start, end);
@@ -549,6 +725,7 @@ app.post("/api/requests", requireAuth, async (req, res) => {
       ]
     );
 
+    await notifyManagersNewRequest(rows[0]).catch((e) => console.error("bildirim:", e.message));
     res.status(201).json(rows[0]);
   } catch (err) {
     console.error(err);
@@ -608,6 +785,7 @@ app.post("/api/admin/requests", requireAuth, requireAdmin, async (req, res) => {
       ]
     );
 
+    await notifyEmployeeStatus(rows[0], "admin_created").catch((e) => console.error("bildirim:", e.message));
     res.status(201).json(rows[0]);
   } catch (err) {
     console.error(err);
@@ -677,6 +855,10 @@ app.put("/api/leave-requests/:id", requireAuth, async (req, res) => {
       ]
     );
 
+    // Yönetici, başka bir çalışanın talebini düzenlediyse o çalışana bildir
+    if (isAdmin && existing[0].user_id !== req.user.id) {
+      await notifyEmployeeStatus(rows[0], "admin_updated").catch((e) => console.error("bildirim:", e.message));
+    }
     res.json(rows[0]);
   } catch (err) {
     console.error(err);
@@ -752,10 +934,68 @@ app.patch("/api/requests/:id", requireAuth, async (req, res) => {
       return res.status(404).json({ error: "Talep bulunamadı." });
     }
 
-    res.json(rows[0]);
+    // Durumu değiştiren kişi talebin sahibi değilse (yani yönetici işlemiyse) çalışana bildir
+    const updated = rows[0];
+    if (updated.userId !== req.user.id) {
+      const kind = updated.status === "onaylandi" ? "request_approved"
+        : updated.status === "reddedildi" ? "request_rejected"
+        : updated.status === "iptal" ? "admin_cancelled" : null;
+      if (kind) {
+        const norm = {
+          ...updated,
+          start: updated.start, end: updated.end, days: updated.days,
+        };
+        await notifyEmployeeStatus(norm, kind).catch((e) => console.error("bildirim:", e.message));
+      }
+    }
+
+    res.json(updated);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Talep güncellenemedi." });
+  }
+});
+
+// ---------------------------------------------------------------------
+// Bildirimler
+// ---------------------------------------------------------------------
+// GET /api/notifications -> { items, unread }
+app.get("/api/notifications", requireAuth, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, type, title, body, request_id AS "requestId", read,
+              created_at AS "createdAt"
+       FROM notifications WHERE user_id = $1
+       ORDER BY created_at DESC LIMIT 50`,
+      [req.user.id]
+    );
+    const unread = rows.reduce((n, r) => n + (r.read ? 0 : 1), 0);
+    res.json({ items: rows, unread });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Bildirimler getirilemedi." });
+  }
+});
+
+// PATCH /api/notifications/:id/read
+app.patch("/api/notifications/:id/read", requireAuth, async (req, res) => {
+  try {
+    await pool.query("UPDATE notifications SET read = true WHERE id = $1 AND user_id = $2", [req.params.id, req.user.id]);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Bildirim güncellenemedi." });
+  }
+});
+
+// POST /api/notifications/read-all
+app.post("/api/notifications/read-all", requireAuth, async (req, res) => {
+  try {
+    await pool.query("UPDATE notifications SET read = true WHERE user_id = $1 AND read = false", [req.user.id]);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Bildirimler güncellenemedi." });
   }
 });
 

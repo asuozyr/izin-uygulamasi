@@ -1,6 +1,9 @@
 # ---- Stage 1: build frontend ----
 FROM node:20-slim AS frontend-build
 WORKDIR /app/frontend
+# Vite, Google Client ID'yi DERLEME ANINDA pakete gömer -> build-arg olarak geçilmeli
+ARG VITE_GOOGLE_CLIENT_ID
+ENV VITE_GOOGLE_CLIENT_ID=$VITE_GOOGLE_CLIENT_ID
 COPY frontend/package*.json ./
 RUN npm install
 COPY frontend/ ./
