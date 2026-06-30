@@ -198,6 +198,18 @@ function initialsFromName(name) {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
+// İsim eşleştirme anahtarı: Türkçe karakterleri ASCII'ye katlar, büyük harfe çevirir,
+// fazla boşlukları sadeleştirir. SQL tarafındaki
+// upper(translate(name,'çÇğĞıİöÖşŞüÜ','cCgGiIoOsSuU')) ile birebir aynı sonucu üretir.
+const TR_FOLD = { ç:"c", Ç:"C", ğ:"g", Ğ:"G", ı:"i", İ:"I", ö:"o", Ö:"O", ş:"s", Ş:"S", ü:"u", Ü:"U" };
+function normNameKey(s) {
+  return String(s || "")
+    .replace(/[çÇğĞıİöÖşŞüÜ]/g, (c) => TR_FOLD[c])
+    .toUpperCase()
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
 // ---------------------------------------------------------------------
 // Auth middleware
 // ---------------------------------------------------------------------
@@ -292,16 +304,21 @@ app.post("/api/auth/google", async (req, res) => {
       );
     }
 
-    // 3) Hâlâ yoksa, Google'a bağlı olmayan bir seed kaydını ad ile eşle (başlangıç verisini bağla)
+    // 3) Hâlâ yoksa, Google'a bağlı OLMAYAN bir kaydı ad ile eşle (seed/manuel kaydı bağla).
+    //    Türkçe karakter farkları (I/ı, İ/i, ş, ğ ...) eşleşmeyi bozmasın diye normalize edilir.
     if (!employee) {
       ({ rows } = await pool.query(
-        "SELECT id, role FROM employees WHERE google_id IS NULL AND email IS NULL AND lower(name) = lower($1) LIMIT 1",
-        [name]
+        `SELECT id, role FROM employees
+         WHERE google_id IS NULL
+           AND upper(translate(name,'çÇğĞıİöÖşŞüÜ','cCgGiIoOsSuU')) = $1
+         LIMIT 1`,
+        [normNameKey(name)]
       ));
       employee = rows[0];
       if (employee) {
+        // Admin daha önce bir e-posta tanımladıysa onu koru; yoksa Google e-postasını yaz.
         await pool.query(
-          "UPDATE employees SET google_id = $1, email = $2, avatar_url = $3, initials = $4 WHERE id = $5",
+          "UPDATE employees SET google_id = $1, email = COALESCE(email, $2), avatar_url = $3, initials = $4 WHERE id = $5",
           [googleId, email, avatar, initials, employee.id]
         );
       }
@@ -375,6 +392,39 @@ app.get("/api/employees", requireAuth, requireAdmin, async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Çalışanlar getirilemedi." });
+  }
+});
+
+// PATCH /api/employees/:id/email  -> yönetici bir çalışana e-posta tanımlar/günceller.
+// Bu e-posta Google hesabıyla eşleştiğinde kullanıcı aynı çalışana bağlanır (yeni kayıt açılmaz).
+app.patch("/api/employees/:id/email", requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    let email = (req.body && req.body.email ? String(req.body.email) : "").trim().toLowerCase();
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({ error: "Geçerli bir e-posta adresi girin." });
+    }
+    // Aynı e-posta başka bir çalışanda olmasın (ikinci kayıt / çakışma engeli)
+    if (email) {
+      const { rows: dup } = await pool.query(
+        "SELECT id FROM employees WHERE email = $1 AND id <> $2",
+        [email, id]
+      );
+      if (dup.length) {
+        return res.status(409).json({ error: "Bu e-posta zaten başka bir çalışana tanımlı." });
+      }
+    }
+    const { rows } = await pool.query(
+      `UPDATE employees SET email = $1 WHERE id = $2
+       RETURNING id, name, initials, balance, role, email, avatar_url, hire_date, employee_color`,
+      [email || null, id]
+    );
+    if (!rows.length) return res.status(404).json({ error: "Çalışan bulunamadı." });
+    const used = await usedAnnualDays(rows[0].id);
+    res.json(publicUser(rows[0], used));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "E-posta güncellenemedi." });
   }
 });
 

@@ -218,6 +218,8 @@ const api = {
     apiRequest("/api/auth/google", { method: "POST", body: JSON.stringify({ credential }) }),
   getMe: (token) => apiRequest("/api/me", {}, token),
   getEmployees: (token) => apiRequest("/api/employees", {}, token),
+  setEmployeeEmail: (token, id, email) =>
+    apiRequest(`/api/employees/${id}/email`, { method: "PATCH", body: JSON.stringify({ email }) }, token),
   getRequests: (token, userId) =>
     apiRequest(`/api/requests${userId ? `?userId=${encodeURIComponent(userId)}` : ""}`, {}, token),
   createRequest: (token, payload) =>
@@ -626,10 +628,42 @@ function MainApp({ token, user, onLogout }) {
   const [calendarMonth, setCalendarMonth] = useState(now.getMonth() + 1);
 
   // ---- Load employees once (yalnızca yönetici; /api/employees admin'e özel) ----
-  useEffect(() => {
+  const loadEmployees = useCallback(() => {
     if (realRole !== "yonetici") return;
     api.getEmployees(token).then(setEmployees).catch((err) => setError(err.message));
   }, [token, realRole]);
+  useEffect(() => {
+    loadEmployees();
+  }, [loadEmployees]);
+
+  // Çalışanlar tablosunda e-posta düzenleme durumu
+  const [emailEditId, setEmailEditId] = useState(null);
+  const [emailEditVal, setEmailEditVal] = useState("");
+  const [emailEditErr, setEmailEditErr] = useState("");
+  const [emailSaving, setEmailSaving] = useState(false);
+  function startEmailEdit(emp) {
+    setEmailEditId(emp.id);
+    setEmailEditVal(emp.email || "");
+    setEmailEditErr("");
+  }
+  function cancelEmailEdit() {
+    setEmailEditId(null);
+    setEmailEditVal("");
+    setEmailEditErr("");
+  }
+  async function saveEmailEdit(id) {
+    setEmailSaving(true);
+    setEmailEditErr("");
+    try {
+      await api.setEmployeeEmail(token, id, emailEditVal.trim());
+      cancelEmailEdit();
+      loadEmployees();
+    } catch (err) {
+      setEmailEditErr(err.message || "E-posta güncellenemedi.");
+    } finally {
+      setEmailSaving(false);
+    }
+  }
 
   // ---- Load requests ----
   const refreshRequests = useCallback(() => {
@@ -1184,7 +1218,7 @@ function MainApp({ token, user, onLogout }) {
                 </>
               )}
               <div>
-                <label style={{ fontSize: 13, color: "var(--color-text-secondary)", display: "block", marginBottom: 4 }}>Acil durumlarda ulaşılabilecek telefon</label>
+                <label style={{ fontSize: 13, color: "var(--color-text-secondary)", display: "block", marginBottom: 4 }}>Ulaşılabilecek telefon</label>
                 <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, marginBottom: 6, cursor: "pointer" }}>
                   <input type="checkbox" checked={form.useExistingPhone} onChange={(e) => updateField("useExistingPhone", e.target.checked)} />
                   Mevcut cep telefonum
@@ -1490,7 +1524,7 @@ function MainApp({ token, user, onLogout }) {
                 </>
               )}
               <div>
-                <label style={{ fontSize: 13, color: "var(--color-text-secondary)", display: "block", marginBottom: 4 }}>Acil durumlarda ulaşılabilecek telefon <span style={{ color: "var(--color-text-tertiary)" }}>(opsiyonel)</span></label>
+                <label style={{ fontSize: 13, color: "var(--color-text-secondary)", display: "block", marginBottom: 4 }}>Ulaşılabilecek telefon <span style={{ color: "var(--color-text-tertiary)" }}>(opsiyonel)</span></label>
                 <div style={{ display: "flex", gap: 6 }}>
                   <input type="text" list="ulke-kodlari-admin" value={adminForm.countryCode} onChange={(e) => updateAdminField("countryCode", e.target.value)} aria-label="Ülke kodu"
                     style={{ width: 78, flexShrink: 0, fontFamily: "inherit", fontSize: 14, padding: "6px 8px", borderRadius: "var(--border-radius-md)", border: `1px solid ${adminErrors.contactPhone ? ERR_COLOR : "var(--color-border-secondary)"}`, boxSizing: "border-box" }} />
@@ -1551,6 +1585,7 @@ function MainApp({ token, user, onLogout }) {
               <thead>
                 <tr>
                   <th style={th}>Çalışan</th>
+                  <th style={th}>E-posta</th>
                   <th style={th}>İşe giriş</th>
                   <th style={{ ...th, textAlign: "right" }}>Hak edilen</th>
                   <th style={{ ...th, textAlign: "right" }}>Kullanılan</th>
@@ -1559,7 +1594,7 @@ function MainApp({ token, user, onLogout }) {
               </thead>
               <tbody>
                 {employees.length === 0 ? (
-                  <tr><td style={{ ...td, color: "var(--color-text-tertiary)" }} colSpan={5}>Çalışan bulunamadı.</td></tr>
+                  <tr><td style={{ ...td, color: "var(--color-text-tertiary)" }} colSpan={6}>Çalışan bulunamadı.</td></tr>
                 ) : (
                   employees.map((e) => {
                     const earned = Number(e.totalEarned ?? e.balance ?? 0);
@@ -1573,6 +1608,34 @@ function MainApp({ token, user, onLogout }) {
                             <span style={{ fontWeight: 500 }}>{e.name}</span>
                             {e.role === "yonetici" && <span style={{ fontSize: 11, padding: "1px 7px", borderRadius: 999, background: "var(--accent-bg)", color: "var(--accent)" }}>Yönetici</span>}
                           </div>
+                        </td>
+                        <td style={td}>
+                          {emailEditId === e.id ? (
+                            <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 220 }}>
+                              <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                                <input
+                                  type="email"
+                                  value={emailEditVal}
+                                  onChange={(ev) => setEmailEditVal(ev.target.value)}
+                                  placeholder="ornek@smartalpha.ai"
+                                  autoFocus
+                                  onKeyDown={(ev) => { if (ev.key === "Enter") saveEmailEdit(e.id); if (ev.key === "Escape") cancelEmailEdit(); }}
+                                  style={{ flex: 1, fontFamily: "inherit", fontSize: 13, padding: "5px 8px", borderRadius: "var(--border-radius-md)", border: `1px solid ${emailEditErr ? ERR_COLOR : "var(--color-border-secondary)"}`, boxSizing: "border-box" }}
+                                />
+                                <button onClick={() => saveEmailEdit(e.id)} disabled={emailSaving} style={{ fontSize: 12, padding: "5px 10px", background: BRAND.primary, borderColor: BRAND.primary, color: "#fff" }}>{emailSaving ? "…" : "Kaydet"}</button>
+                                <button onClick={cancelEmailEdit} disabled={emailSaving} style={{ fontSize: 12, padding: "5px 10px" }}>İptal</button>
+                              </div>
+                              {emailEditErr && <span style={{ color: ERR_COLOR, fontSize: 12 }}>{emailEditErr}</span>}
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => startEmailEdit(e)}
+                              title="E-posta tanımla/düzenle"
+                              style={{ background: "none", border: "none", padding: 0, cursor: "pointer", fontSize: 13, color: e.email ? "var(--color-text-secondary)" : "var(--accent)", textDecoration: "underline", textUnderlineOffset: 2 }}
+                            >
+                              {e.email || "E-posta ekle"}
+                            </button>
+                          )}
                         </td>
                         <td style={{ ...td, color: "var(--color-text-secondary)" }}>{e.hireDate ? formatDate(e.hireDate) : "—"}</td>
                         <td style={numTd}>{fmt(earned)}</td>
