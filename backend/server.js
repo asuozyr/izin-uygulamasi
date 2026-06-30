@@ -97,6 +97,43 @@ function hoursBetween(startTime, endTime) {
   if (s == null || e == null || e <= s) return 0;
   return (e - s) / 60;
 }
+
+// Resmi tatiller (genişletilebilir): "YYYY-MM-DD" formatında. İş gününe sayılmaz.
+// İleride buraya tarih eklenince (örn. "2026-04-23") otomatik olarak izinden düşülür.
+const HOLIDAYS = new Set([
+  // "2026-01-01", "2026-04-23", "2026-05-01", "2026-05-19", "2026-07-15",
+  // "2026-08-30", "2026-10-29",
+]);
+function parseYmd(s) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(s || ""));
+  return m ? new Date(+m[1], +m[2] - 1, +m[3]) : null; // yerel gün başı (UTC kayması olmadan)
+}
+function ymd(d) {
+  const y = d.getFullYear();
+  const mo = String(d.getMonth() + 1).padStart(2, "0");
+  const da = String(d.getDate()).padStart(2, "0");
+  return `${y}-${mo}-${da}`;
+}
+// Hafta sonu (Cmt/Paz) ve resmi tatil değilse iş günüdür.
+function isBusinessDay(d) {
+  const wd = d.getDay(); // 0=Pazar, 6=Cumartesi
+  if (wd === 0 || wd === 6) return false;
+  if (HOLIDAYS.has(ymd(d))) return false;
+  return true;
+}
+// start..end (dahil) aralığındaki iş günü sayısı.
+function businessDaysBetween(start, end) {
+  const s = parseYmd(start);
+  const e = parseYmd(end);
+  if (!s || !e || e < s) return 0;
+  let count = 0;
+  const cur = new Date(s.getFullYear(), s.getMonth(), s.getDate());
+  while (cur <= e) {
+    if (isBusinessDay(cur)) count++;
+    cur.setDate(cur.getDate() + 1);
+  }
+  return count;
+}
 // Gün tipine göre toplam izin günü:
 //  full_day -> aralıktaki her gün 1
 //  half_day -> her gün 0,5
@@ -104,27 +141,25 @@ function hoursBetween(startTime, endTime) {
 //              dönüş günü "bitiş saati"ne kadar (her biri en yakın 0,5), aradaki günler tam.
 const FULL_WORKDAY_HOURS = 9;
 const CUSTOM_MIN_HOURS = 2;
-const CUSTOM_MIN_MSG = "Girilen izin süresi 2 saat veya 2 saatten az olamaz. Lütfen yöneticinizle görüşünüz veya Yarım Gün izin giriniz.";
+const CUSTOM_MIN_MSG = "Girilen izin süresi 2 saatten az olamaz. Lütfen yöneticinizle görüşünüz.";
 const WORK_START_MIN = 9 * 60; // 09:00
 const WORK_END_MIN = 18 * 60; // 18:00
 const r05 = (n) => Math.round(n * 2) / 2;
 const clamp01 = (n) => Math.min(1, Math.max(0, n));
 function computeDays(dayType, start, end, startTime, endTime) {
-  const base = diffDays(start, end);
-  if (dayType === "half_day") return round1(0.5 * base);
+  if (dayType === "half_day") return 0.5;
   if (dayType === "custom") {
-    if (base <= 1) {
-      return Math.max(0.5, r05(clamp01(hoursBetween(startTime, endTime) / FULL_WORKDAY_HOURS)));
+    // Tek gün (saatli): saat farkına göre 0,5 / 1; 2 saatten azı geçersiz (0).
+    if (start === end) {
+      const h = hoursBetween(startTime, endTime);
+      if (h < CUSTOM_MIN_HOURS) return 0;
+      return h < 4 ? 0.5 : 1;
     }
-    const sm = timeToMin(startTime);
-    const em = timeToMin(endTime);
-    // Başlangıç günü: başlangıç saatinden mesai sonuna kadar izinli
-    const startFrac = sm == null ? 1 : r05(clamp01((WORK_END_MIN - Math.max(WORK_START_MIN, sm)) / (FULL_WORKDAY_HOURS * 60)));
-    // Dönüş günü: mesai başından bitiş saatine kadar izinli
-    const endFrac = em == null ? 1 : r05(clamp01((Math.min(WORK_END_MIN, em) - WORK_START_MIN) / (FULL_WORKDAY_HOURS * 60)));
-    return Math.max(0.5, startFrac + (base - 2) + endFrac);
+    // Çok günlük "kendim gireceğim": iş günü bazlı tam gün say (hafta sonu/tatil hariç).
+    return businessDaysBetween(start, end);
   }
-  return base;
+  // full_day: yalnızca iş günleri (Pzt–Cuma), hafta sonu ve resmi tatiller düşülür.
+  return businessDaysBetween(start, end);
 }
 
 // Yer/telefon/saat alanlarını gün tipine ve "kayıtlı bilgimi kullan" seçeneklerine göre çöz.
@@ -487,7 +522,7 @@ app.post("/api/requests", requireAuth, async (req, res) => {
     if (dur === "custom" && (!f.startTime || !f.endTime)) {
       return res.status(400).json({ error: "Saat girişi için başlangıç ve bitiş saati zorunludur." });
     }
-    if (dur === "custom" && start === end && hoursBetween(f.startTime, f.endTime) <= CUSTOM_MIN_HOURS) {
+    if (dur === "custom" && start === end && hoursBetween(f.startTime, f.endTime) < CUSTOM_MIN_HOURS) {
       return res.status(400).json({ error: CUSTOM_MIN_MSG });
     }
 
@@ -548,7 +583,7 @@ app.post("/api/admin/requests", requireAuth, requireAdmin, async (req, res) => {
     if (dur === "custom" && (!f.startTime || !f.endTime)) {
       return res.status(400).json({ error: "Saat girişi için başlangıç ve bitiş saati zorunludur." });
     }
-    if (dur === "custom" && start === end && hoursBetween(f.startTime, f.endTime) <= CUSTOM_MIN_HOURS) {
+    if (dur === "custom" && start === end && hoursBetween(f.startTime, f.endTime) < CUSTOM_MIN_HOURS) {
       return res.status(400).json({ error: CUSTOM_MIN_MSG });
     }
 
@@ -617,7 +652,7 @@ app.put("/api/leave-requests/:id", requireAuth, async (req, res) => {
     if (dur === "custom" && (!f.startTime || !f.endTime)) {
       return res.status(400).json({ error: "Saat girişi için başlangıç ve bitiş saati zorunludur." });
     }
-    if (dur === "custom" && start === end && hoursBetween(f.startTime, f.endTime) <= CUSTOM_MIN_HOURS) {
+    if (dur === "custom" && start === end && hoursBetween(f.startTime, f.endTime) < CUSTOM_MIN_HOURS) {
       return res.status(400).json({ error: CUSTOM_MIN_MSG });
     }
 

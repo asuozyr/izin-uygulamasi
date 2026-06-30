@@ -70,7 +70,7 @@ function diffDays(start, end) {
 // custom -> tek gün: (bitiş-başlangıç)/9; çok gün: sınır günler saatlere göre, aradakiler tam.
 const FULL_WORKDAY_HOURS = 9;
 const CUSTOM_MIN_HOURS = 2;
-const CUSTOM_MIN_MSG = "Girilen izin süresi 2 saat veya 2 saatten az olamaz. Lütfen yöneticinizle görüşünüz veya Yarım Gün izin giriniz.";
+const CUSTOM_MIN_MSG = "Girilen izin süresi 2 saatten az olamaz. Lütfen yöneticinizle görüşünüz.";
 const WORK_START_MIN = 9 * 60;
 const WORK_END_MIN = 18 * 60;
 function timeToMin(t) {
@@ -83,28 +83,61 @@ function hoursBetween(startTime, endTime) {
   if (s == null || e == null || e <= s) return 0;
   return (e - s) / 60;
 }
+// Resmi tatiller (genişletilebilir): "YYYY-MM-DD". İş gününe sayılmaz.
+const HOLIDAYS = new Set([
+  // "2026-01-01", "2026-04-23", "2026-05-01", "2026-05-19", "2026-07-15",
+  // "2026-08-30", "2026-10-29",
+]);
+function parseYmd(s) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(s || ""));
+  return m ? new Date(+m[1], +m[2] - 1, +m[3]) : null;
+}
+function ymd(d) {
+  const y = d.getFullYear();
+  const mo = String(d.getMonth() + 1).padStart(2, "0");
+  const da = String(d.getDate()).padStart(2, "0");
+  return `${y}-${mo}-${da}`;
+}
+function isBusinessDay(d) {
+  const wd = d.getDay(); // 0=Paz, 6=Cmt
+  if (wd === 0 || wd === 6) return false;
+  if (HOLIDAYS.has(ymd(d))) return false;
+  return true;
+}
+function businessDaysBetween(start, end) {
+  const s = parseYmd(start);
+  const e = parseYmd(end);
+  if (!s || !e || e < s) return 0;
+  let count = 0;
+  const cur = new Date(s.getFullYear(), s.getMonth(), s.getDate());
+  while (cur <= e) {
+    if (isBusinessDay(cur)) count++;
+    cur.setDate(cur.getDate() + 1);
+  }
+  return count;
+}
 const r05 = (n) => Math.round(n * 2) / 2;
 const clamp01 = (n) => Math.min(1, Math.max(0, n));
 function leaveDays(dayType, start, end, startTime, endTime) {
   if (!start || !end) return 0;
-  const base = diffDays(start, end);
-  if (dayType === "half_day") return Math.round(0.5 * base * 10) / 10;
+  if (dayType === "half_day") return 0.5;
   if (dayType === "custom") {
-    if (base <= 1) {
-      return Math.max(0.5, r05(clamp01(hoursBetween(startTime, endTime) / FULL_WORKDAY_HOURS)));
+    // Tek gün (saatli): saat farkına göre 0,5 / 1; 2 saatten azı geçersiz (0).
+    if (start === end) {
+      const h = hoursBetween(startTime, endTime);
+      if (h < CUSTOM_MIN_HOURS) return 0;
+      return h < 4 ? 0.5 : 1;
     }
-    const sm = timeToMin(startTime);
-    const em = timeToMin(endTime);
-    const startFrac = sm == null ? 1 : r05(clamp01((WORK_END_MIN - Math.max(WORK_START_MIN, sm)) / (FULL_WORKDAY_HOURS * 60)));
-    const endFrac = em == null ? 1 : r05(clamp01((Math.min(WORK_END_MIN, em) - WORK_START_MIN) / (FULL_WORKDAY_HOURS * 60)));
-    return Math.max(0.5, startFrac + (base - 2) + endFrac);
+    // Çok günlük: iş günü bazlı tam gün (hafta sonu/tatil hariç).
+    return businessDaysBetween(start, end);
   }
-  return base;
+  // full_day: yalnızca iş günleri (Pzt–Cuma).
+  return businessDaysBetween(start, end);
 }
 const fmtDays = (n) => Number(n).toLocaleString("tr-TR", { maximumFractionDigits: 1 });
 // "Kendim gireceğim" tek günde süre 2 saat veya altıysa izin verilmez
 function customSpanTooShort(dayType, start, end, startTime, endTime) {
-  return dayType === "custom" && !!start && start === end && !!startTime && !!endTime && hoursBetween(startTime, endTime) <= CUSTOM_MIN_HOURS;
+  return dayType === "custom" && !!start && start === end && !!startTime && !!endTime && hoursBetween(startTime, endTime) < CUSTOM_MIN_HOURS;
 }
 
 function formatDate(isoDate) {
@@ -638,6 +671,8 @@ function MainApp({ token, user, onLogout }) {
 
   // Çalışanlar tablosunda e-posta düzenleme durumu
   const [emailEditId, setEmailEditId] = useState(null);
+  // "Tüm talepler" canlı arama (çalışan adına göre)
+  const [tumSearch, setTumSearch] = useState("");
   const [emailEditVal, setEmailEditVal] = useState("");
   const [emailEditErr, setEmailEditErr] = useState("");
   const [emailSaving, setEmailSaving] = useState(false);
@@ -1197,10 +1232,10 @@ function MainApp({ token, user, onLogout }) {
                 </div>
                 <p style={{ fontSize: 11.5, color: "var(--color-text-tertiary)", margin: "4px 0 0" }}>
                   {form.durationType === "full_day"
-                    ? "Her gün tam gün sayılır."
+                    ? "Yalnızca iş günleri (Pzt–Cuma) sayılır; hafta sonu ve resmi tatiller düşülür."
                     : form.durationType === "half_day"
                     ? "Her gün 0,5 gün sayılır."
-                    : "Başlangıç günü 'başlangıç saati'nden, dönüş günü 'bitiş saati'ne kadar; aradaki günler tam gün sayılır (en yakın 0,5)."}
+                    : "Saat farkına göre: 2–4 saat arası 0,5 gün, 4 saat ve üzeri 1 gün. 2 saatten az izin verilmez."}
                 </p>
               </div>
               {form.durationType === "custom" && (
@@ -1406,9 +1441,52 @@ function MainApp({ token, user, onLogout }) {
       )}
 
       {/* ---- Tüm talepler (manager) ---- */}
-      {view === "tumtalepler" && (
+      {view === "tumtalepler" && (() => {
+        const q = tumSearch.toLocaleLowerCase("tr").trim();
+        const sorted = requests.slice().sort((a, b) => b.id - a.id);
+        const filtered = q
+          ? sorted.filter((r) => {
+              const nm = (employees.find((u) => u.id === r.userId)?.name || "").toLocaleLowerCase("tr");
+              return nm.includes(q);
+            })
+          : sorted;
+        return (
         <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-          {requests.slice().sort((a, b) => b.id - a.id).map((r) => {
+          <div style={{ position: "relative", maxWidth: 360 }}>
+            <i className="ti ti-search" aria-hidden="true"
+              style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", fontSize: 15, color: "var(--color-text-tertiary)", pointerEvents: "none" }}></i>
+            <input
+              type="text"
+              value={tumSearch}
+              onChange={(e) => setTumSearch(e.target.value)}
+              placeholder="Çalışan adı ile ara..."
+              aria-label="Çalışan adı ile ara"
+              style={{
+                width: "100%", boxSizing: "border-box",
+                fontFamily: "inherit", fontSize: 14,
+                padding: "9px 34px 9px 34px",
+                borderRadius: "var(--border-radius-lg)",
+                border: "1px solid var(--color-border-secondary)",
+                background: "var(--color-background-primary)",
+                outline: "none",
+              }}
+            />
+            {tumSearch && (
+              <button
+                onClick={() => setTumSearch("")}
+                aria-label="Aramayı temizle"
+                title="Temizle"
+                style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", padding: 4, cursor: "pointer", color: "var(--color-text-tertiary)", lineHeight: 1, fontSize: 15 }}
+              >
+                ✕
+              </button>
+            )}
+          </div>
+          {filtered.length === 0 ? (
+            <div style={{ padding: "18px 4px", fontSize: 14, color: "var(--color-text-tertiary)" }}>
+              {q ? `"${tumSearch.trim()}" için talep bulunamadı.` : "Henüz talep yok."}
+            </div>
+          ) : filtered.map((r) => {
             const emp = employees.find((u) => u.id === r.userId);
             return (
               <div key={r.id} style={{
@@ -1449,7 +1527,8 @@ function MainApp({ token, user, onLogout }) {
             );
           })}
         </div>
-      )}
+        );
+      })()}
 
       {/* ---- Çalışan adına izin gir (yönetici) ---- */}
       {view === "izingir" && role === "yonetici" && (
