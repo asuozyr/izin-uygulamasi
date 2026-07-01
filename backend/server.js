@@ -77,7 +77,7 @@ function leaveEmailHtml({ heading, statusLabel, statusColor, employeeName, typeL
   return `<!doctype html><html><body style="margin:0;background:#f4f4f7;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif">
   <div style="max-width:560px;margin:0 auto;padding:24px">
     <div style="text-align:center;padding:8px 0 16px">
-      <span style="font-size:26px;font-weight:800;color:#111827;letter-spacing:-.5px">Smart<span style="color:${BRAND_PURPLE};font-style:italic">α</span></span>
+      <img src="${APP_URL}/logo-email.png" alt="SmartAlpha" width="180" style="display:inline-block;width:180px;max-width:60%;height:auto" />
     </div>
     <div style="background:#fff;border-radius:14px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.08)">
       <div style="background:${BRAND_PURPLE};padding:18px 24px">
