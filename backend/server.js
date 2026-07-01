@@ -147,7 +147,6 @@ async function notifyManagersNewRequest(r) {
     note: `${empName} yeni bir izin talebi oluşturdu ve onayınızı bekliyor.`,
   });
   for (const m of mgrs) {
-    if (m.id === r.userId) continue; // kendi talebi olan yönetici için atla
     await createNotification({
       userId: m.id, type: "request_created", title: "Yeni izin talebi",
       body: `${empName} • ${typeLabel} • ${range} (${daysText})`, requestId: r.id,
